@@ -1,0 +1,6 @@
+[submodule "doc/trt_samples"]
+	path = doc/trt_samples
+	url = https://github.com/NVIDIA/trt-samples-for-hackathon-cn.git
+[submodule "doc/kernel"]
+	path = doc/kernel
+	url = https://github.com/xlite-dev/LeetCUDA.git

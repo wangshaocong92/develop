@@ -35,14 +35,13 @@ deps.list
 **/cmake-build-release/**
 .cache/
 
-
-app/test_mos_gen
 backup
 mos_idl_output_all
 mach_package/
-
+compile_commands.json
 unit_test_reports
 
 *.pb.h
 *.pb.cc
 *.txt.user*
+test_logs

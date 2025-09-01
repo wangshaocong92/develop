@@ -1,0 +1,66 @@
+#include "soft_softmax.h"
+#include <limits>
+
+namespace kernel {
+void safe_softmax(const float *input, float *output, int length) {
+  float max_val = input[0];
+  for (int i = 1; i < length; ++i) {
+    if (input[i] > max_val)
+      max_val = input[i];
+  }
+
+  float sum = 0.0f;
+  for (int i = 0; i < length; ++i) {
+    sum += expf(input[i] - max_val);
+  }
+
+  for (int i = 0; i < length; ++i) {
+    output[i] = expf(input[i] - max_val) / sum;
+  }
+}
+
+__device__ float warpReduceMax(float val) {
+  unsigned mask = __activemask();
+  for (int offset = warpSize / 2; offset > 0; offset /= 2)
+    val = max(val, __shfl_down_sync(mask, val, offset));
+  return val;
+}
+
+template <typename T, int length>
+__global__ void softmax_gpu(const T *input, T *output, cudaStream_t stream) {}
+
+template <typename T,int length>
+__global__ void safe_softmax_gpu(const T *input, T *output,
+                                 cudaStream_t stream) {
+  /// block size
+  /// thread size
+  extern __global__ float max_val[];
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  
+  int index = bid * blockDim.x + tid;
+  if (index >= length)
+    return;
+  /// 先将数据放到共享内存中
+  extern __shared__ float s_data[];
+  s_data[tid] = (index < length) ? input[index] : std::numeric_limits<T>::lowest();
+  __syncthreads();
+  /// reduce 求最大值
+  extern __shared__ float warp_max[];
+  auto val = warpReduceMax(s_data[tid]);
+  if (tid % warpSize == 0)
+    warp_max[tid / warpSize] = val;
+  __syncthreads();
+  auto warp_size = (blockDim.x + warpSize - 1) / warpSize;
+  /// 求出block内的最大值
+  if (tid < warp_size) {
+    warp_max[tid] = warpReduceMax(warp_max[tid]);
+  }
+  if(tid == 0)
+    max_val[bid] = warp_max[0];
+  /// 若是block内的线程数小于 warpSize * warpSize则  warp_max[0] 就是block 内的最大值
+  /// 我们需要block 级别的同步 
+   
+}
+
+} // namespace kernel

@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.18)
+
+
+project(develop)
+enable_language(CUDA)
+set(CUDA_SEPARABLE_COMPILATION ON)  # 如需分离编译
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall")  
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -Wall -Xcompiler -Wextra")
+set(CMAKE_CUDA_FLAGS_DEBUG "-G -O0")
+set(CMAKE_CUDA_FLAGS_RELEASE "-O2")
+set(CMAKE_CUDA_ARCHITECTURES "89")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX $ENV{PROJECT_PATH}/install CACHE PATH "Install path prefix" FORCE)
+endif()
+add_subdirectory(kernel)
+
+
+
+
+
