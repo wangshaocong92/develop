@@ -38,7 +38,7 @@ deps.list
 backup
 mos_idl_output_all
 mach_package/
-
+compile_commands.json
 unit_test_reports
 
 *.pb.h
