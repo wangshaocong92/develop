@@ -11,11 +11,9 @@ class DevelopConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"
     options = {
-        "with_opencv_gpu": [False, "True", "Thor"],
         "with_test": [True, False],
     }
     default_options = {
-        "with_opencv_gpu": False,
         "with_test": False,
     }
     tool_requires = ["protobuf/3.21.12", "breakpad/cci.20210521"]
@@ -43,18 +41,6 @@ class DevelopConan(ConanFile):
         # specify glog options
         self.options["glog"].shared = True
         self.options["abseil"].shared = True
-        # specifiy opencv options
-        # self.options["opencv"].parallel = "openmp"
-        self.options["opencv"].shared = True
-        self.options["opencv"].with_ffmpeg = False
-        self.options["opencv"].with_tiff = False
-        self.options["opencv"].with_webp = False
-        self.options["opencv"].with_openexr = False
-        self.options["opencv"].with_jpeg2000 = False
-        self.options["opencv"].with_gtk = False
-        self.options["opencv"].with_jpeg = "libjpeg-turbo"
-        self.options["opencv"].text = False
-        self.options["opencv"].with_wayland = False
         self.options["freeimage"].with_jpeg = "libjpeg-turbo"
         self.options["libyuv"].with_jpeg = "libjpeg-turbo"
         self.options["libtiff"].jpeg = "libjpeg-turbo"
@@ -63,13 +49,6 @@ class DevelopConan(ConanFile):
         self.options["freeimage"].with_raw = False
         self.options["freeimage"].with_openexr = False
         self.options["acados"].shared = True
-        if self.options.with_opencv_gpu != False:
-            self.options["opencv"].with_cuda = True
-            self.options["opencv"].cudaarithm = True
-            self.options["opencv"].dnn = True
-            self.options["opencv"].cudaimgproc = True
-            self.options["opencv"].cudawarping = True
-            self.options["opencv"].cuda_arch_bin = "7.2,7.5,8.6"
 
         self.options["ceres-solver"].use_glog = True
         self.options["proj"].with_tiff = False
@@ -94,11 +73,9 @@ class DevelopConan(ConanFile):
         self.requires("glog/0.7.1", force=True)
         self.requires("abseil/20230125.2")
         self.requires("boost/1.75.0", force=True)
-        self.requires("opencv/4.10.0")
         self.requires("libpng/1.6.40")
         self.requires("eigen/3.4.0")
         self.requires("toml11/3.7.0")
-        self.requires("spdlog/1.9.2")
         self.requires("sqlite3/3.39.4", force=True)
         self.requires("yaml-cpp/0.8.0")
         self.requires("pcl/1.13.1")
@@ -120,8 +97,7 @@ class DevelopConan(ConanFile):
         self.requires("sml/1.1.11")
         self.requires("readerwriterqueue/1.0.6")
         self.requires("bshoshany-thread-pool/4.1.0")
-        if self.options.with_test:
-            self.requires("gtest/1.13.0@transformer/stable")
+        self.requires("gtest/1.15.0")
         self.requires("quill/7.3.0")
         self.requires("ffmpeg/4.3.2")
         self.requires("asio/1.28.1", override=True)
@@ -131,21 +107,4 @@ class DevelopConan(ConanFile):
         self.requires("argparse/3.1")  # 从3.2起不支持conan1
         self.requires("fmt/8.0.1")
         self.requires("libssh2/1.11.1")
-        if self.settings.arch != "x86_64":
-            self.requires("camera_monitor/0.0.6@")
         self.requires("libpcap/1.10.4")
-
-    def generate(self):
-        tc = CMakeToolchain(self)
-        tc.cache_variables["CMAKE_POLICY_DEFAULT_CMP0077"] = "NEW"
-        if self.options.with_test:
-            tc.variables["BUILD_TESTING"] = True
-        else:
-            tc.variables["BUILD_TESTING"] = False
-        tc.generate()
-        tc = CMakeDeps(self)
-        tc.generate()
-        tc = VirtualRunEnv(self)
-        tc.generate()
-        tc = VirtualBuildEnv(self)
-        tc.generate(scope="build")
