@@ -40,17 +40,39 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 
         // Pointers to input and output device buffers to pass to engine.
         // Engine requires exactly IEngine::getNbBindings() number of buffers.
-        assert(engine.getNbBindings() == 2);
+        assert(engine.getNbIOTensors() == 2);
         void* buffers[2];
 
         // In order to bind the buffers, we need to know the names of the input and output tensors.
         // Note that indices are guaranteed to be less than IEngine::getNbBindings()
-        const int inputIndex = engine.getBindingIndex(IN_NAME);
-        const int outputIndex = engine.getBindingIndex(OUT_NAME);
+        int inputIndex = 0;
+        int outputIndex = 0;
+        for(auto i = 0 ; i <  engine.getNbIOTensors();i ++)
+        {
+            engine.getIOTensorName(i) == IN_NAME ? inputIndex = i : outputIndex = i;
 
+        }
+        auto shape = engine.getTensorShape(IN_NAME);
+        std::cout << "input tensor shape: ";
+        for (int i = 0; i < shape.nbDims; i++)
+        {
+            std::cout << shape.d[i] << " ";
+        }
+        std::cout << std::endl;
+        shape = engine.getTensorShape(OUT_NAME);
+        std::cout << "output tensor shape: ";
+        for (int i = 0; i < shape.nbDims; i++)
+        {
+            std::cout << shape.d[i] << " ";
+        }
+        std::cout << std::endl;
         // Create GPU buffers on device
         CHECK(cudaMalloc(&buffers[inputIndex], batchSize * 3 * IN_H * IN_W * sizeof(float)));
-        CHECK(cudaMalloc(&buffers[outputIndex], batchSize * 3 * IN_H * IN_W /4 * sizeof(float)));
+        CHECK(cudaMalloc(&buffers[outputIndex], batchSize * 3 * 768 * 768 * sizeof(float)));
+
+
+        context.setTensorAddress(IN_NAME, buffers[0]);
+        context.setTensorAddress(OUT_NAME, buffers[1]);
 
         // Create stream
         cudaStream_t stream;
@@ -66,6 +88,8 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
         cudaStreamDestroy(stream);
         CHECK(cudaFree(buffers[inputIndex]));
         CHECK(cudaFree(buffers[outputIndex]));
+
+        std::cout << "inference done!" << std::endl;
 }
 
 int main(int argc, char** argv)

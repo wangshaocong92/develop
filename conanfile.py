@@ -55,12 +55,6 @@ class DevelopConan(ConanFile):
         self.options["proj"].with_curl = False
         self.options["proj"].shared = True
         self.options["libyuv"].with_jpeg = False
-        self.options["boost"].without_locale = True
-        self.options["boost"].without_log = True
-        self.options["boost"].without_test = True
-        self.options["boost"].without_stacktrace = True
-        self.options["boost"].without_fiber = True
-        self.options["gtsam"].with_TBB = False
         if self.settings.arch != "x86_64":
             self.ffmpeg_confiure()
 
@@ -72,7 +66,6 @@ class DevelopConan(ConanFile):
         self.requires("ceres-solver/2.1.0")
         self.requires("glog/0.7.1", force=True)
         self.requires("abseil/20230125.2")
-        self.requires("boost/1.75.0", force=True)
         self.requires("libpng/1.6.40")
         self.requires("eigen/3.4.0")
         self.requires("toml11/3.7.0")
@@ -83,7 +76,6 @@ class DevelopConan(ConanFile):
         self.requires("proj/9.5.0")
         self.requires("nlohmann_json/3.11.2")
         self.requires("nanoflann/1.4.3")
-        self.requires("gtsam/4.1.1")
         self.requires("zstd/1.5.2")
         self.requires("libcurl/7.80.0")
         self.requires("taskflow/3.8.0")

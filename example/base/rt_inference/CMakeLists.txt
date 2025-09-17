@@ -12,11 +12,11 @@ find_package(OpenCV REQUIRED)
 find_package(NumCpp REQUIRED)
 find_package(glog REQUIRED)
 find_package(CUDAToolkit REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS}   ${CUDAToolkit_INCLUDE_DIRS} ${NumCpp_INCLUDE_DIRS} ${glog_INCLUDE_DIRS}   CUDA::cudart)
+include_directories(${OpenCV_INCLUDE_DIRS}   ${CUDAToolkit_INCLUDE_DIRS} ${NumCpp_INCLUDE_DIRS} ${glog_INCLUDE_DIRS})
 
 
 
 
 add_executable(rt_inference rt_from_rt.cpp)
-target_link_libraries(rt_inference nvinfer ${OpenCV_LIBS} glog::glog NumCpp::NumCpp)  
+target_link_libraries(rt_inference nvinfer ${OpenCV_LIBS} glog::glog NumCpp::NumCpp  CUDA::cudart)  
 
