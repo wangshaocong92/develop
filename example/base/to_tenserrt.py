@@ -1,8 +1,14 @@
 import torch
 import onnx
 import tensorrt as trt
+import os
+project_path = os.getenv("PROJECT_PATH")
+print("PROJECT_PATH:", project_path)
+if project_path is None:
+    print("Please set the PROJECT_PATH environment variable to the root directory of the project.")
+    exit(1)
 
-middle_path = "./example/base/middle_files/"
+middle_path = project_path + "/example/base/middle_files/"
 onnx_model = onnx.load(middle_path + "srcnn.onnx")
 device = torch.device('cuda:0')
 # create builder and network
