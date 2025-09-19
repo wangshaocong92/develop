@@ -26,6 +26,9 @@ __device__ float warpReduceMax(float val) {
   return val;
 }
 
+template <typename T, int length>
+__global__ void softmax_gpu(const T *input, T *output, cudaStream_t stream) {}
+
 template <typename T,int length>
 __global__ void safe_softmax_gpu(const T *input, T *output,
                                  cudaStream_t stream) {
