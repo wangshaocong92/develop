@@ -1,4 +1,4 @@
-#include "soft_softmax.h"
+#include "safe_softmax.cuh"
 #include <limits>
 
 namespace kernel {

@@ -4,3 +4,6 @@
 [submodule "doc/kernel"]
 	path = doc/kernel
 	url = https://github.com/xlite-dev/LeetCUDA.git
+[submodule "doc/cuda_code"]
+	path = doc/cuda_code
+	url = https://github.com/xgqdut2016/cuda_code
