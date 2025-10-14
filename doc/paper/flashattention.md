@@ -42,8 +42,6 @@ GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transfor
 图 1：**左：** FlashAttention 使用平铺来防止在（相对）较慢的 GPU HBM 上具体化大的 \(N\times N\) 注意力矩阵（虚线框）。在外层循环（红色箭头）中，FlashAttention 遍历 **K** 和 **V** 矩阵的块并将其加载到快速的片上 SRAM。在每个块中，FlashAttention 遍历 **Q** 矩阵的块（蓝色箭头），将其加载到 SRAM，并将注意力计算的输出写回 HBM。**右：** 在 GPT-2 上相对于 PyTorch 注意力实现的速度提升。FlashAttention 不读写大的 \(N\times N\) 注意力矩阵到 HBM，从而在注意力计算上实现了 \(7.6\times\) 的加速。
 乘法）的进一步扩展。我们开源 FlashAttention 以便更容易地基于此原语进行构建。¹
 
-脚注 1：FlashAttention 代码可在 https://github.com/HazyResearch/flash-attention 获取。
-
 我们通过经验验证了 FlashAttention 通过建模更长的上下文来加速模型训练并提高模型质量。我们还将 FlashAttention 和块稀疏 FlashAttention 的运行时和内存占用与先前的注意力实现进行了基准测试。
 
 *   **更快的模型训练。** FlashAttention 在实际时钟时间上更快地训练 Transformer 模型。我们训练 BERT-large（序列长度 512）比 MLPerf 1.1 [58] 中的训练速度记录快 15%，训练 GPT2（序列长度 1K）比 HuggingFace [87] 和 Megatron-LM [77] 的基线实现快 3 倍，训练长距离竞技场（序列长度 1K-4K）比基线快 2.4 倍。
