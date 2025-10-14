@@ -31,9 +31,6 @@ Transformer 模型 [82] 已成为自然语言处理和图像分类等应用中�
 许多近似注意力方法旨在减少注意力的计算和内存需求。这些方法范围从稀疏近似 [51, 74] 到低秩近似 [12, 50, 84]，以及它们的组合 [9, 32, 3]。尽管这些方法将计算需求降低到序列长度的线性或近线性，但其中许多方法相比标准注意力并未显示出实际时钟速度的提升，并且未获得广泛采用。一个主要原因是它们专注于 FLOP 的减少（这可能与时钟速度无关），并且往往忽略了内存访问（IO）的开销。
 
 在本文中，我们认为一个缺失的原则是使注意力算法具有 **IO 感知** [1]——即，仔细考虑对不同级别快慢内存（例如，在快速的 GPU 片上 SRAM 和相对较慢的 GPU 高带宽内存或 HBM [45] 之间，图 1 左）的读写。在现代
-
-===== 第 2 页 =====
-
 GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transformer 中的大多数操作都受限于内存访问 [43]。对于类似的内存受限操作，当读写数据可能占运行时的大部分时，IO 感知算法一直至关重要——例如数据库连接 [71]、图像处理 [70]、数值线性代数 [4] 等等 [40, 85]。然而，深度学习的常见 Python 接口（如 PyTorch 和 TensorFlow）不允许对内存访问进行细粒度控制。
 
 我们提出了 FlashAttention，一种新的注意力算法，它能够以少得多的内存访问次数计算精确注意力。我们的主要目标是避免将注意力矩阵读写到 HBM。这需要 (i) 在没有整个输入的情况下计算 softmax 归约；(ii) 不为反向传播存储大的中间注意力矩阵。我们应用两种成熟的技术来解决这些挑战。(i) 我们重构注意力计算，将输入分成块并对输入块进行多次遍历，从而增量地执行 softmax 归约（也称为 **平铺**）。(ii) 我们存储前向传播中的 softmax 归一化因子，以便在反向传播中在芯片上快速 **重新计算** 注意力，这比从 HBM 读取中间注意力矩阵的标准方法更快。我们在 CUDA 中实现 FlashAttention 以实现对内存访问的细粒度控制，并将所有注意力操作融合到一个 GPU 核中。即使由于重新计算导致 FLOPs 增加，我们的算法由于 HBM 访问量的大幅减少，相比标准注意力既 **运行更快**（在 GPT-2 [67] 上高达 \(7.6\times\)，图 1 右）又 **使用更少的内存**——与序列长度呈线性关系。
@@ -43,9 +40,6 @@ GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transfor
 我们还展示了 FlashAttention 可以通过克服内存访问开销问题，作为实现近似注意力算法潜力的有用原语。作为概念验证，我们实现了块稀疏 FlashAttention，这是一种稀疏注意力算法，比 FlashAttention 快 \(2\)-\(4\times\)，可扩展到 64k 的序列长度。我们证明块稀疏 FlashAttention 的 IO 复杂度比 FlashAttention 好一个与稀疏比率成比例的因子。我们在第 5 节讨论了扩展到其他操作（多 GPU 上的注意力、核回归、块稀疏矩阵
 
 图 1：**左：** FlashAttention 使用平铺来防止在（相对）较慢的 GPU HBM 上具体化大的 \(N\times N\) 注意力矩阵（虚线框）。在外层循环（红色箭头）中，FlashAttention 遍历 **K** 和 **V** 矩阵的块并将其加载到快速的片上 SRAM。在每个块中，FlashAttention 遍历 **Q** 矩阵的块（蓝色箭头），将其加载到 SRAM，并将注意力计算的输出写回 HBM。**右：** 在 GPT-2 上相对于 PyTorch 注意力实现的速度提升。FlashAttention 不读写大的 \(N\times N\) 注意力矩阵到 HBM，从而在注意力计算上实现了 \(7.6\times\) 的加速。
-
-===== 第 3 页 =====
-
 乘法）的进一步扩展。我们开源 FlashAttention 以便更容易地基于此原语进行构建。¹
 
 脚注 1：FlashAttention 代码可在 https://github.com/HazyResearch/flash-attention 获取。
@@ -74,9 +68,6 @@ GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transfor
 2.  内存受限：操作所花费的时间由内存访问的次数决定，而计算所花费的时间要小得多。例子包括大多数其他操作：逐元素操作（例如，激活、dropout）和归约操作（例如，求和、softmax、批量归一化、层归一化）。
 
 **核融合。** 加速内存受限操作的最常见方法是核融合：如果对同一输入应用多个操作，则可以从 HBM 加载一次输入，而不是为每个操作加载多次。编译器可以自动融合许多逐元素操作 [53, 65, 75]。
-
-===== 第 4 页 =====
-
 然而，在模型训练的背景下，中间值仍然需要写入 HBM 以保存用于反向传播，这降低了朴素核融合的有效性。
 
 ### 2.2 标准注意力实现
@@ -115,9 +106,6 @@ GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transfor
 **平铺。** 我们分块计算注意力。Softmax 耦合了 \(\mathbf{K}\) 的列，因此我们使用缩放 [51, 60, 66] 来分解大的 softmax。为了数值稳定性，向量 \(x\in\mathbb{R}^{B}\) 的 softmax 计算为：
 
 \[m(x):=\max_{i} x_{i},\quad f(x):=\begin{bmatrix}e^{x_{1}-m(x)}&\ldots&e^{x_{B}-m(x)}\end{bmatrix},\quad \ell(x):=\sum_{i}f(x)_{i},\quad \text{softmax}(x):=\frac{f(x)}{\ell(x)}.\]
-
-===== 第 5 页 =====
-
 对于向量 \(x^{(1)},x^{(2)}\in\mathbb{R}^{B}\)，我们可以将拼接后的 \(x=\left[x^{(1)} x^{(2)}\right]\in\mathbb{R}^{2B}\) 的 softmax 分解为：
 
 \[m(x)=m(\left[x^{(1)} x^{(2)}\right])=\max(m(x^{(1)}),m(x^{(2)})),\quad f(x)=\left[e^{m(x^{(1)})-m(x)}f(x^{(1)})\quad e^{m(x^{(2)})-m(x)}f(x^{(2)})\right],\]
@@ -158,9 +146,6 @@ FlashAttention
 ### 3.2 分析：FlashAttention 的 IO 复杂度
 
 我们分析了 FlashAttention 的 IO 复杂度，显示与标准注意力相比 HBM 访问次数显著减少。我们还提供了一个下界，证明没有精确注意力算法可以
-
-===== 第 6 页 =====
-
 在所有 SRAM 大小上渐进地改进 HBM 访问次数。证明在附录 C 中。
 
 **定理 2.** _设 \(N\) 为序列长度，\(d\) 为头维度，\(\bm{M}\) 为 SRAM 大小，满足 \(d\leq \bm{M}\leq Nd\)。标准注意力（算法 3）需要 \(\Theta(Nd+N^{2})\) 次 HBM 访问，而 FlashAttention（算法 3）需要 \(\Theta(N^{2}d^{2}\bm{M}^{-1})\) 次 HBM 访问。_
@@ -188,9 +173,6 @@ FlashAttention
 其中 \((\mathbf{S}\odot\mathbbm{1}_{\widetilde{\mathbf{M}}})_{kl}=\mathbf{S}_{kl}\) 如果 \(\widetilde{\mathbf{M}}_{kl}=1\)，否则为 \(-\infty\)。我们要求 \(\widetilde{\mathbf{M}}\) 具有块形式：对于某个块大小 \(B_{r},B_{c}\)，对于所有 \(k,l\)，\(\widetilde{\mathbf{M}}_{k,l}=\mathbf{M}_{lj}\)，其中 \(i=\lfloor k/B_{r}\rfloor,j=\lfloor l/B_{c}\rfloor\)，对于某个 \(\mathbf{M}\in\{0,1\}^{N/B_{r}\times N/B_{c}}\)。
 
 图 2：**左：** 标准注意力和 FlashAttention 在 GPT-2 medium（序列长度 1024，头维度 64，16 个头，批量大小 64）上的前向+反向运行时间，在 A100 GPU 上。HBM 访问是影响运行时间的主要因素。**中：** FlashAttention（序列长度 1024，头维度 64，16 个头，批量大小 64）在 A100 GPU 上的前向运行时间。更少的 HBM 访问导致更快的运行时间，但达到一个点后不再明显。**右：** 块稀疏 FlashAttention 的运行时间（对于序列长度 4K）比 FlashAttention 快一个与稀疏度成比例的因子。
-
-===== 第 7 页 =====
-
 给定一个预定义的块稀疏掩码 \(\mathbf{M}\in\{0,1\}^{N/B_{r}\times N/B_{c}}\)，我们可以轻松地调整算法 1 以仅计算注意力矩阵的非零块。该算法与算法 1 相同，只是我们跳过零块。我们在附录 B 的算法 5 中重现了算法描述。
 
 我们还分析了块稀疏 FlashAttention 的 IO 复杂度。
@@ -214,9 +196,6 @@ FlashAttention
 **BERT。** FlashAttention 产生了我们所知的最快的单节点 BERT 训练速度。我们使用 FlashAttention 在 Wikipedia 上训练一个 BERT-large [22] 模型。表 1 将我们的训练时间与设置了 MLPerf 1.1 [58] 训练速度记录的 Nvidia 实现进行了比较。我们的实现快 \(15\%\)。
 
 **GPT-2。** FlashAttention 在大型 OpenWebtext 数据集 [32] 上为 GPT-2 [67] 提供了比广泛使用的 HuggingFace [87] 和 Megatron-LM [77] 实现更快的训练时间。表 2 显示与 Huggingface 相比端到端加速高达 \(3\times\)，与 Megatron-LM 相比加速 \(1.7\times\)。FlashAttention
-
-===== 第 8 页 =====
-
 实现了与其他两种实现相同的困惑度，因为我们没有改变模型定义。附录 E 包含了整个训练过程中的验证困惑度图，确认 FlashAttention 与基线一样数值稳定，并产生相同的训练/验证曲线。
 
 **长距离竞技场。** 我们在长距离竞技场（LRA [80]）基准测试上比较了普通 Transformer（使用标准实现或 FlashAttention）。我们测量了所有模型的准确率、吞吐量和训练时间。每个任务具有不同的序列长度，范围在 1024 到 4096 之间。我们遵循 Tay 等人 [80] 和 Xiong 等人 [90] 的实现和实验设置。³ 表 3 显示 FlashAttention 相比标准注意力实现了高达 2.4 倍的加速。块稀疏 FlashAttention 比我们测试过的所有近似注意力方法都要快。
@@ -233,9 +212,6 @@ FlashAttention
 表 3：标准注意力、FlashAttention、块稀疏 FlashAttention 和近似注意力基线在长距离竞技场基准测试上的性能。
 
 表 2：使用 FlashAttention 的 GPT-2 small 和 medium 相比 Huggingface 实现实现了高达 3 倍的加速，相比 Megatron-LM 实现了高达 1.7 倍的加速。报告了在 8 个 A100 GPU 上的训练时间。
-
-===== 第 9 页 =====
-
 欧洲人权法院的法律案件，每个案件都被映射到据称被侵犯的《人权公约》条款。这两个数据集都包含非常长的文本文档；MIMIC 中的平均令牌数为 2,395 个，最长的文档包含 14,562 个令牌，而 ECtHR 中的平均和最长数量分别为 2,197 和 49,392。我们评估了增加预训练 RoBERTa 模型 [56] 序列长度带来的提升（我们重复位置嵌入，如 Beltagy 等人 [3]）。
 
 表 5 显示，序列长度 16K 在 MIMIC 上比长度 512 高出 4.3 个百分点，而长度 8K 在 ECtHR 上比长度 512 高出 8.5 个百分点。这些差异可能是由于细微的分布偏移：MIMIC-III 包含专业的医学文本，因此可能更容易受到文档长度分布偏移的影响，而 ECtHR 包含通用语言。
@@ -252,9 +228,6 @@ FlashAttention
 图 3：**左：** 前向传播 + 反向传播的运行时间。**右：** 注意力内存使用情况。
 
 表 6：我们报告了第一个能够在 Path-X 和 Path-256 上实现非随机性能的 Transformer 模型。
-
-===== 第 10 页 =====
-
 **运行时间。** 图 3（左）报告了 FlashAttention 和块稀疏 FlashAttention 与精确、近似和稀疏注意力基线相比的前向 + 反向传播运行时间（以毫秒为单位）（具体数字在附录 E）。运行时间随序列长度二次增长，但 FlashAttention 的运行速度显著快于 **精确注意力** 基线，比 PyTorch 实现快达 \(3\times\)。许多近似/稀疏注意力机制的运行时间随序列长度线性增长，但由于内存访问次数更少，对于短序列，FlashAttention 仍然比近似和稀疏注意力运行得更快。**近似注意力** 的运行时间在序列长度介于 512 和 1024 之间时开始与 FlashAttention 交叉。另一方面，块稀疏 FlashAttention 在我们所知的所有序列长度上，比所有精确、稀疏和近似注意力的实现都要快。
 
 **内存占用。** 图 3（右）显示了 FlashAttention 和块稀疏 FlashAttention 与各种精确、近似和稀疏注意力基线相比的内存占用。FlashAttention 和块稀疏 FlashAttention 具有相同的内存占用，随序列长度线性增长。FlashAttention 比 **精确注意力** 基线内存效率高多达 \(20\times\)，并且比 **近似注意力** 基线更内存高效。除 Linformer 外，所有其他算法在达到 64K 之前在 A100 GPU 上内存不足，而 FlashAttention 仍然比 Linformer 高效 \(2\times\)。
@@ -274,9 +247,6 @@ FlashAttention
 我们的实现以 Apex 的 FMHA 代码 (https://github.com/NVIDIA/apex/tree/master/apex/contrib/csrc/fmha) 作为起点。我们感谢 Young-Jun Ko 对其 FMHA 实现的深入解释以及他对我们关于 CUDA 问题的深思熟虑的回答。我们感谢 Sabri Eyuboglu, Megan Leszczynski, Laurel Orr, Yuhuai Wu, Beidi Chen 和 Xun Huang 他们对论文早期草稿的建设性反馈和建议。我们感谢 Markus Rabe 和 Charles Staats 对他们注意力算法的有益讨论。
 
 我们衷心感谢 NIH under No. U54EB020405 (Mobilize), NSF under Nos. CCF1763315 (Beyond Sparsity), CCF1563078 (Volume to Velocity), and 1937301 (RTML); ARL under No. W911NF-21-2-0251 (Interactive Human-AI Teaming); ONR under No. N000141712266 (Unifying Weak Supervision); ONR N00014-20-1-2480: Understanding and Applying Non-Euclidean Geometry in Machine Learning; N000142012275 (NEPTUNE); NXP, Xilinx, LETI-CEA, Intel, IBM, Microsoft, NEC, Toshiba, TSMC, ARM, Hitachi, BASF, Accenture, Ericsson, Qualcomm, Analog Devices, Google Cloud, Salesforce, Total, the HAI-GCP & HAI-Azure Cloud Credits for Research program, the Stanford Data Science Initiative (SDSI), Department of Defense (DoD) through the National Defense Science and Engineering Graduate Fellowship (NDSEG) Program, and members of the Stanford DAWN project: Facebook, Google, and VMWare 的支持。美国政府被授权为政府目的复制和分发再版，
-
-===== 第 11 页 =====
-
 无论其上是否有任何版权标记。本材料中表达的任何意见、发现、结论或建议均为作者的观点，不一定反映 NIH、ONR 或美国政府的观点、政策或认可，无论明示或暗示。Atri Rudra 的研究得到了 NSF grant CCF-1763481 的支持。
 
 ## 参考文献
@@ -295,9 +265,6 @@ FlashAttention
 *   [12] Krzysztof Marcin Choromanski, Valerii Likhosherstov, David Dohan, Xingyou Song, Andreea Gane, Tamas Sarlos, Peter Hawkins, Jared Quincy Davis, Afroz Mohiuddin, Lukasz Kaiser, et al. Rethinking attention with performers. In _International Conference on Learning Representations (ICLR)_, 2020.
 *   [13] Xiang Dai, Ilias Chalkidis, Sune Darkner, and Desmond Elliott. Revisiting transformer-based models for long document classification. _arXiv preprint arXiv:2204.06683_, 2022.
 *   [14] Zihang Dai, Zhilin Yang, Yiming Yang, Jaime G Carbonell, Quoc Le, and Ruslan Salakhutdinov. Transformer-XL: Attentive language models beyond a fixed-length context. In _Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics_, pages 2978-2988, 2019.
-
-===== 第 12 页 =====
-
 *   [15] Tri Dao, Albert Gu, Matthew Eichhorn, Atri Rudra, and Christopher Re. Learning fast algorithms for linear transforms using butterfly factorizations. In _International Conference on Machine Learning (ICML)_, 2019.
 *   [16] Tri Dao, Nimit Sohoni, Albert Gu, Matthew Eichhorn, Amit Blonder, Megan Leszczynski, Atri Rudra, and Christopher Re. Kaleidoscope: An efficient, learnable representation for all structured linear maps. In _International Conference on Learning Representations (ICLR)_, 2020.
 *   [17] Tri Dao, Beidi Chen, Kaizhao Liang, Jiaming Yang, Zhao Song, Atri Rudra, and Christopher Re. Pixelated butterfly: Simple and efficient sparse training for neural network models. In _International Conference on Learning Representations (ICLR)_, 2022.
@@ -316,9 +283,6 @@ FlashAttention
 *   [30] Jonathan Frankle, Gintare Karolina Dziugaite, Daniel Roy, and Michael Carbin. Linear mode connectivity and the lottery ticket hypothesis. In _International Conference on Machine Learning_, pages 3259-3269. PMLR, 2020.
 *   [31] Karan Goel, Albert Gu, Chris Donahue, and Christopher Re. It's raw! audio generation with state-space models. In _International Conference on Machine Learning (ICML)_, 2022.
 *   [32] Aaron Gokaslan, Vanya Cohen, Pavlick Ellie, and Stefanie Tellex. Openwebtext corpus, 2019
-
-===== 第 13 页 =====
-
 *   [33] Jim Gray, Surajit Chaudhuri, Adam Bosworth, Andrew Layman, Don Reichart, Murali Venkatrao, Frank Pellow, and Hamid Pirahesh. Data cube: A relational aggregation operator generalizing group-by, cross-tab, and sub-totals. _Data mining and knowledge discovery_, 1(1):29-53, 1997.
 *   [34] Andreas Griewank and Andrea Walther. _Evaluating derivatives: principles and techniques of algorithmic differentiation_. SIAM, 2008.
 *   [35] Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, and Christopher Re. Hippo: Recurrent memory with optimal polynomial projections. In _Advances in neural information processing systems (NeurIPS)_, 2020.
@@ -337,9 +301,6 @@ FlashAttention
 *   [48] Norman P Jouppi, Cliff Young, Nishant Patil, David Patterson, Gaurav Agrawal, Raminder Bajwa, Sarah Bates, Suresh Bhatia, Nan Boden, Al Borchers, et al. In-datacenter performance analysis of a tensor processing unit. In _Proceedings of the 44th annual international symposium on computer architecture_, pages 1-12, 2017.
 *   [49] Thomas Kailath, Sun-Yuan Kung, and Martin Morf. Displacement ranks of matrices and linear equations. _Journal of Mathematical Analysis and Applications_, 68(2):395-407, 1979.
 *   [50] Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Francois Fleuret. Transformers are RNNs: Fast autoregressive transformers with linear attention. In _International Conference on Machine Learning_, pages 5156-5165. PMLR, 2020
-
-===== 第 14 页 =====
-
 *   [51] Nikita Kitaev, Lukasz Kaiser, and Anselm Levskaya. Reformer: The efficient transformer. In _The International Conference on Machine Learning (ICML)_, 2020.
 *   [52] Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, and Radu Soricut. Albert: A lite BEDRT for self-supervised learning of language representations. In _The International Conference on Learning Representations (ICLR)_, 2020.
 *   [53] Mingzhen Li, Yi Liu, Xiaoyan Liu, Qingxiao Sun, Xin You, Hailong Yang, Zhongzhi Luan, Lin Gan, Guangwen Yang, and Depei Qian. The deep learning compiler: A comprehensive survey. _IEEE Transactions on Parallel and Distributed Systems_, 32(3):708-727, 2020.
@@ -359,9 +320,6 @@ FlashAttention
 *   [67] Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
 *   [68] Jack Rae and Ali Razavi. Do transformers need deep long-range memory? In _Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics_, Online, July 2020. Association for Computational Linguistics. URL https://www.aclweb.org/anthology/2020.acl-main.672.
 *   [69] Jack W Rae, Anna Potapenko, Siddhant M Jayakumar, and Timothy P Lillicrap. Compressive transformers for long-range sequence modelling. In _The International Conference on Learning Representations (ICLR)_, 2020
-
-===== 第 15 页 =====
-
 *   [70] Jonathan Ragan-Kelley, Connelly Barnes, Andrew Adams, Sylvain Paris, Fredo Durand, and Saman Amarasinghe. Halide: a language and compiler for optimizing parallelism, locality, and recomputation in image processing pipelines. _Acm Sigplan Notices_, 48(6):519-530, 2013.
 *   [71] Raghu Ramakrishnan, Johannes Gehrke, and Johannes Gehrke. _Database management systems_, volume 3. McGraw-Hill New York, 2003.
 *   [72] Benjamin Recht and Christopher Re. Parallel stochastic gradient algorithms for large-scale matrix completion. _Mathematical Programming Computation_, 5(2):201-226, 2013.
@@ -379,9 +337,6 @@ FlashAttention
 *   [84] Sinong Wang, Belinda Z Li, Madian Khabsa, Han Fang, and Hao Ma. Linformer: Self-attention with linear complexity. _arXiv preprint arXiv:2006.04768_, 2020.
 *   [85] Samuel Williams, Andrew Waterman, and David Patterson. Roofline: an insightful visual performance model for multicore architectures. _Communications of the ACM_, 52(4):65-76, 2009.
 *   [86] Michael E Wolf and Monica S Lam. A data locality optimizing algorithm. In _Proceedings of the ACM SIGPLAN 1991 conference on Programming language design and implementation_, pages 30-44, 1991
-
-===== 第 16 页 =====
-
 *   [87] Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pierric Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger, Mariama Drame, Quentin Lhoest, and Alexander M. Rush. Transformers: State-of-the-art natural language processing. In _Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations_, pages 38-45, Online, October 2020. Association for Computational Linguistics. URL https://www.aclweb.org/anthology/2020.emnlp-demos.6.
 *   [88] David P Woodruff. Optimal space lower bounds for all frequency moments. In _SODA_, volume 4, pages 167-175. Citeseer, 2004.
 *   [89] Felix Wu, Angela Fan, Alexei Baevski, Yann N Dauphin, and Michael Auli. Pay less attention with lightweight and dynamic convolutions. In _The International Conference on Learning Representations (ICLR)_, 2019.
@@ -390,9 +345,6 @@ FlashAttention
 *   [92] Manzil Zaheer, Guru Guruganesh, Kumar Avinava Dubey, Joshua Ainslie, Chris Alberti, Santiago Ontanon, Philip Pham, Anirudh Ravula, Qifan Wang, Li Yang, et al. Big bird: Transformers for longer sequences. _Advances in Neural Information Processing Systems_, 33, 2020.
 *   [93] Shuangfei Zhai, Walter Talbott, Nitish Srivastava, Chen Huang, Hanlin Goh, Ruixiang Zhang, and Josh Susskind. An attention free transformer. _arXiv preprint arXiv:2105.14103_, 2021.
 *   [94] Chen Zhu, Wei Ping, Chaowei Xiao, Mohammad Shoeybi, Tom Goldstein, Anima Anandkumar, and Bryan Catanzaro. Long-short transformer: Efficient transformers for language and vision. _Advances in Neural Information Processing Systems_, 34, 2021.
-
-===== 第 17 页 =====
-
 A 相关工作
 
 **IO 感知运行时优化。** 优化快慢内存读写的广泛概念在计算机科学中有着悠久的历史，并以许多名称而闻名。我们在这项工作中与分析 I/O 复杂度的文献 [1] 建立了最直接的联系，但内存层次结构的概念是基础性的，并以多种形式出现，从工作集模型 [21]，到数据局部性 [86]，到算术强度的 Roofline 模型 [85]，到可扩展性分析 [59]，到计算机体系结构的标准教科书处理 [40]。我们希望这项工作能鼓励社区在深度学习的更多部分采用这些思想。
@@ -408,9 +360,6 @@ A 相关工作
 ## 附录 B 算法细节
 
 我们首先推导注意力的前向和反向传播，并表明它们可以以内存高效的方式计算（需要线性而非序列长度二次方的额外内存）。尽管它们减少了所需的额外内存量，但朴素地实现仍然会产生二次 HBM 访问，导致执行速度较慢。我们描述了 FlashAttention 算法，以在 GPU 上实现前向
-
-===== 第 18 页 =====
-
 和反向传播，减少 HBM 访问，从而带来更快的运行时间和更小的内存占用。
 
 ### B.1 内存高效的前向传播
@@ -455,9 +404,6 @@ A 相关工作
 回想 \(P_{ii}=\text{softmax}(S_{ii})\)。利用 \(\mathbf{y}=\text{softmax}(x)\) 的雅可比矩阵是 \(\text{diag}(\mathbf{y})-\mathbf{y}\mathbf{y}^{T}\) 这一事实，我们有
 
 \[dS_{ii}=(\text{diag}(P_{ii})-P_{ii}.p^{T}_{ii})dP_{ii}=P_{ii}\circ dP_{ii}-(P^{T}_{ii}.dP_{ii})P_{ii},\]
-
-===== 第 19 页 =====
-
 其中 \(\circ\) 表示逐点乘法。
 
 定义
@@ -496,9 +442,6 @@ A 相关工作
 其中 \(\tau\in\mathbb{R}\) 是某个 softmax 缩放因子（通常是 \(\frac{1}{\sqrt{d}}\)），mask 是某个掩码函数，它将输入的一些条目设置为 \(-\infty\) 并保持其他条目不变（例如，当批次中的序列长度不同并被填充时的键填充掩码），并且 \({\rm dropout}(x,p)\) 将 dropout 逐元素应用于 \(x\)（即，对于每个元素 \(x\)，以概率 \(1-p\) 输出 \(\frac{x}{1-p}\)，以概率 \(p\) 输出 \(0\)）。
 
 完整算法在算法 2 中。我们保存输出 \({\bf O}\)、softmax 统计量 \(\ell\) 和 \(m\)，以及用于反向传播的伪随机数生成器状态 \(\mathcal{R}\)。
-
-===== 第 20 页 =====
-
 .
 
 ### B.4 FlashAttention：反向传播
@@ -520,9 +463,6 @@ A 相关工作
 
 1.  我们不需要存储来自前向传播的大小为 \(O(N^{2})\) 的 dropout 掩码。相反，我们可以保存来自前向传播的伪随机数生成器状态，并在反向传播中重新生成 dropout 掩码。这使我们仅使用 \(O(N)\) 的额外内存。
 2.  当计算 softmax 梯度时，我们使用方程 (4) 计算 \(D_{i}=P_{i}^{\top}dP_{i}\)：无需归约大小为 \(N\) 的 \(P_{i}:\) 和 \(dP_{i}:\)（它们可能无法放入 SRAM）。相反，我们可以重写 \(D_{i}=d\sigma_{i}^{\top}\sigma_{i}\) 并计算大小为 \(d\) 的向量之间的点积。
-
-===== 第 21 页 =====
-
 完整的 FlashAttention 反向传播算法在算法 4 中。概念上它只是附录 B.2 中推导的块版本。
 
 [htbp] FlashAttention 反向传播
@@ -562,9 +502,6 @@ A 相关工作
 **定理 5.** _设 \(N\) 为序列长度，\(d\) 为头维度，\(M\) 为 SRAM 大小，满足 \(d\leq M\leq Nd\)。标准注意力（算法 4）反向传播需要 \(\Theta(Nd+N^{2})\) 次 HBM 访问，而 FlashAttention 反向传播（算法 4）需要 \(\Theta(N^{2}d^{2}M^{-1})\) 次 HBM 访问。_
 
 证明在附录 C 中。
-
-===== 第 22 页 =====
-
 B.5 与 Rabe 和 Staats [66] 的比较
 
 我们在这里描述我们的 FlashAttention 算法与 Rabe 和 Staats [66] 的算法之间的一些相似之处和差异。
@@ -592,9 +529,6 @@ B.5 与 Rabe 和 Staats [66] 的比较
 \[m^{(j)}=\text{rowmax}(\mathbf{S}_{:,:j})\in\mathbb{R}^{N},\quad \ell^{(j)}=\text{rowsum}(\exp(\mathbf{S}_{:,:j}-m^{(j)}))\in\mathbb{R}^{N},\quad \mathbf{O}^{(j)}=\mathbf{P}_{:,:j}\mathbf{V}_{:j}\in\mathbb{R}^{N\times d}.\]
 
 基于我们的初始化（算法 1 第 2 行），这个主张对于 \(j=0\)（即，在外层循环任何迭代执行之前）成立。假设该主张对某个 \(j=0,\ldots,T_{c}-1\) 成立。我们想证明该主张对 \(j+1\) 也成立。确实，当我们在外层循环第 \((j+1)\) 次迭代的内层循环中更新统计量时（算法 1 第 10 行）
-
-===== 第 23 页 =====
-
 ，我们更新 \(m^{(j+1)}=\max(m^{(j)},\tilde{m})\)，其中 \(\tilde{m}\in\mathbb{R}^{N}\) 是 \(\mathbf{S}_{:,j:j+1}\) 的行最大值，即 \(\mathbf{S}\) 从第 \(jB_{c}\) 列到第 \((j+1)B_{c}-1\) 列的切片。这意味着
 
 \[m^{(j+1)}=\text{rowmax}(\mathbf{S}_{:,:j+1})\in\mathbb{R}^{N}.\]
@@ -646,9 +580,6 @@ B.5 与 Rabe 和 Staats [66] 的比较
 最后，我们需要大小为 \(B_{r}\times B_{c}\) 的块 \(\mathbf{S}_{ij}\) 能放入片上内存，这转化为：
 
 \[B_{r}B_{c}=O(M).\]
-
-===== 第 24 页 =====
-
 因此我们设置：
 
 \[B_{c}=\Theta\left(\frac{M}{d}\right),\qquad B_{r}=\Theta\left(\min\left(\frac{M}{d},\frac{M}{B_{c}}\right)\right)=\Theta\left(\min\left(\frac{M}{d},d\right)\right).\]
@@ -692,9 +623,6 @@ B.5 与 Rabe 和 Staats [66] 的比较
 结果，HBM 访问次数为：
 
 \[\Theta\left(NdT_{c}\right)=\Theta\left(\frac{N^{2}d^{2}}{M}\right).\]
-
-===== 第 25 页 =====
-
 ## 附录 D 扩展细节
 
 ### D.1 块稀疏 FlashAttention
@@ -733,9 +661,6 @@ B.5 与 Rabe 和 Staats [66] 的比较
 我们在这里讨论 IO 感知方法加速深度学习训练的一些潜在扩展。
 
 **多 GPU 注意力。** 大型语言模型在数百或数千个 GPU 上训练，并且通常在同一节点上的 4-8 个 GPU 之间分割注意力计算 [77]。这引入了另一个内存层次级别：除了 GPU SRAM 和 GPU HBM，我们还有其他
-
-===== 第 26 页 =====
-
 GPU 的 HBM。对于非常长的序列，同一节点上的不同 GPU 可以通过考虑不同级别内存层次结构的不对称性来协作计算注意力。
 
 **稀疏 MLP 层。** 典型的密集 MLP 层是计算受限的，而不是内存受限的。为了提高其效率，可以使用具有稀疏权重矩阵的 MLP 层 [17]。然而，许多稀疏 MLP 层反而是内存受限的，并且它们的加速通常与稀疏度不成比例。我们相信 IO 感知实现可以缓解这个问题并实现稀疏性的好处。我们对这个方向的未来工作感到兴奋，以减少大型模型的计算需求并提高其实际时钟运行时间。
@@ -767,9 +692,6 @@ GPU 的 HBM。对于非常长的序列，同一节点上的不同 GPU 可以通�
 在图 4 中，我们绘制了 GPT-2 small/medium 在整个训练过程中使用 HuggingFace 实现或我们的 FlashAttention 实现的验证困惑度。我们看到 FlashAttention 的行为与基线实现相同，并且两种实现的验证困惑度曲线几乎重叠。
 
 **长文档分类。** 对于 MIMIC-III 和 ECtHR，我们遵循 Dai 等人 [13] 的超参数。
-
-===== 第 27 页 =====
-
 ### E.3 LRA 细节
 
 我们遵循来自长距离竞技场论文 [80]、长距离竞技场存储库 (https://github.com/google-research/long-range-arena) 和 Nystromformer 复现 [90] 的超参数。为了对基线方法慷慨，如果我们无法复现任何基线在任何五个任务上的性能，我们报告该基线在该任务上来自 Tay 等人 [80] 或 Xiong 等人 [90] 的更好性能。
@@ -789,9 +711,6 @@ GPU 的 HBM。对于非常长的序列，同一节点上的不同 GPU 可以通�
 当我们开始这个项目时，Apex FMHA 是（我们所知的）最快的注意力实现，针对长度最多为 512 的短序列量身定制。事实上，截至 MLPerf 1.1 [58]，几乎所有在 Nvidia GPU 上运行的 BERT 训练基准的 MLPerf 提交都使用 FMHA 作为其模型代码。自从
 
 图 4：使用两种实现的 GPT-2 small/medium 的验证困惑度。我们确认 FlashAttention 产生与来自 HuggingFace 的基线实现相同的验证曲线。
-
-===== 第 28 页 =====
-
 FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上运行。FMHA 将注意力计算 dropout(softmax(Mask(\(\mathbf{QK}^{\mathsf{T}}\)))\(\mathbf{V}\) 融合到一个 CUDA 核中。在前向传播中，它将注意力矩阵 softmax(Mask(\(\mathbf{QK}^{T}\))) 存储到 HBM 以用于梯度计算。因此，它不提供显著的内存节省（尽管对于较短的序列，内存占用通常不是主要问题）。
 
 我们使用 FMHA 代码作为起点，并应用两种成熟的技术（平铺和重新计算）来处理长序列并节省内存，如第 3 节所述。因此，我们可以支持更长的序列（例如，最多 64K 长度）。我们还支持更多的头维度（16、32、64、128）和更广泛的 GPU 类型（在撰写本文时包括所有 Turing 和 Ampere GPU）。
@@ -807,9 +726,6 @@ FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上�
 表 7：FlashAttention 与 FMHA 按序列长度的运行时间（ms），带有掩码和 dropout，在 A100-SXM4-40GB GPU 上测量。批量大小 64，16 个头，头维度 64（即 BERT-large 大小）。
 
 图 5：在不同序列长度上相对于标准 PyTorch 注意力的加速，在 A100 上。
-
-===== 第 29 页 =====
-
 **A100，头维度 128** 当我们增加头维度时，加速也会改变。每个块需要更多内存，因此我们需要使用更小的块大小以适应 SRAM。图 6 显示了在 A100 上头维度 128 的加速（批量大小 16，12 个头）。我们看到整体加速较少——但我们仍然可以看到显著的加速（高达 3 倍）与因果掩码，其中一半的块被掩码掉。
 
 **RTX 3090** 图 7 显示了在 RTX 3090 GPU 上的加速。这里，我们使用批量大小 12 和 12 个注意力头。我们在 RTX 3090 上观察到稍高的加速（介于 2.5-4.5 倍之间），因为 RTX 3090 上的内存带宽低于 A100（大约 900 GB/s 对比 1.5 TB/s）。
@@ -819,9 +735,6 @@ FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上�
 图 6：在不同序列长度上相对于标准 PyTorch 注意力的加速，在 A100 上，头维度 128。
 
 图 7：在不同序列长度上相对于标准 PyTorch 注意力的加速，在 RTX 3090 上。
-
-===== 第 30 页 =====
-
 ### E.6 完整基准测试结果
 
 我们报告在 A100 上的完整基准测试结果和实验细节。
@@ -831,9 +744,6 @@ FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上�
 **设置** 我们测量具有 8 个头、维度 64、批量大小 16 的注意力计算的运行时间和内存使用情况，在一台具有一个 40 GB GPU HBM 的 A100 GPU 的机器上。我们在实验中改变序列长度。我们在随机向量上计算 \(\mathbf{Q}\)、\(\mathbf{K}\) 和 \(\mathbf{V}\) 的注意力（我们不测量从隐藏层的投影）。对于 dropout，我们使用 dropout 0.1；对于掩码，我们使用一个填充掩码，其掩码长度在总序列长度和总序列长度减 20 之间均匀随机。为了测量运行时间，我们取 100 次注意力调用测量的平均值。我们只测量一次内存占用，因为它在不同运行之间不变化。
 
 图 8：在不同序列长度上相对于标准 PyTorch 注意力的加速，在 T4 上。**顶部：** 组合前向传播 + 反向传播。**底部：** 仅前向传播。
-
-===== 第 31 页 =====
-
 我们报告前向传播、反向传播以及组合前向 + 反向传播的计时结果。我们测量每种方法在有和没有 dropout、掩码或两者的情况下——除了 Block Sparse、Longformer 和 BigBird。这些方法由于外部库中的错误未能成功运行带有掩码的反向传播，因此我们测量它们没有掩码以表示慷慨。我们对所有测量使用 FP16，除了 Local Attention，其实现仅支持 FP32。
 
 对于每个基线，我们增加序列长度直到它在 GPU 上内存不足，除了以下例外：Megatron 实现不支持超过 2048 的序列长度。Block-Sparse (OpenAI) 不支持超过 4096 的序列长度。Longformer 和 BigBird 不支持超过 8092 的序列长度。
@@ -845,17 +755,11 @@ FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上�
 表 8：指向结果表的指针。
 
 表 9：各种精确/近似/稀疏注意力机制按序列长度的前向传播运行时间（ms），**带有 dropout 和掩码**。最佳以 **粗体** 显示，次佳加下划线。
-
-===== 第 32 页 =====
-
 表 10：各种精确/近似/稀疏注意力机制按序列长度的反向传播运行时间（ms），带有 dropout 和掩码。最佳以 **粗体** 显示，次佳加下划线。
 
 表 11：各种精确/近似/稀疏注意力机制按序列长度的前向传播 + 反向传播运行时间（ms），带有 dropout 和掩码。最佳以 **粗体** 显示，次佳加下划线。
 
 表 12：各种精确/近似/稀疏注意力机制按序列长度的前向传播运行时间（ms），带有掩码。最佳以 **粗体** 显示，次佳加下划线。
-
-===== 第 33 页 =====
-
 表 15：各种精确/近似/稀疏注意力机制按序列长度的前向传播运行时间（ms），带有 dropout。最佳以 **粗体** 显示，次佳加下划线。
 
 表 14：各种精确/近似/稀疏注意力机制按序列长度的前向传播 + 反向传播运行时间（ms），带有掩码。最佳以 **粗体** 显示，次佳加下划线。
@@ -865,9 +769,6 @@ FMHA 针对 BERT 模型，它仅支持头维度 64，并且仅在 A100 GPU 上�
 表 16：各种精确/近似/稀疏注意力机制按序列长度的反向传播运行时间（ms），带有 dropout。最佳以 **粗体** 显示，次佳加下划线。
 
 表 17：各种精确/近似/稀疏注意力机制按序列长度的前向传播 + 反向传播运行时间（ms），带有 dropout。最佳以 **粗体** 显示，次佳加下划线。
-
-===== 第 34 页 =====
-
 表 19：各种精确/近似/稀疏注意力机制按序列长度的反向传播运行时间（ms）。最佳以 **粗体** 显示，次佳加下划线。
 
 表 21：各种精确/近似/稀疏注意力机制按序列长度的内存使用（MB）。最佳以 **粗体** 显示，次佳加下划线。
