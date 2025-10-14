@@ -38,7 +38,7 @@ GPU 上，计算速度已经超过了内存速度 [61, 62, 63]，并且 Transfor
 我们分析了 FlashAttention 的 IO 复杂度 [1]，证明它需要 \(O(N^{2}d^{2}\bm{M}^{-1})\) 次 HBM 访问，其中 \(d\) 是头维度，\(\bm{M}\) 是 SRAM 的大小，而标准注意力需要 \(\Omega(Nd+N^{2})\) 次。对于典型的 \(d\) 和 \(\bm{M}\) 值，FlashAttention 需要的 HBM 访问次数比标准注意力少许多倍（最多减少 \(9\times\)，如图 2 所示）。此外，我们提供了一个下界，表明在所有 SRAM 大小上，没有精确注意力算法能在 HBM 访问次数上渐进地改进。
 
 我们还展示了 FlashAttention 可以通过克服内存访问开销问题，作为实现近似注意力算法潜力的有用原语。作为概念验证，我们实现了块稀疏 FlashAttention，这是一种稀疏注意力算法，比 FlashAttention 快 \(2\)-\(4\times\)，可扩展到 64k 的序列长度。我们证明块稀疏 FlashAttention 的 IO 复杂度比 FlashAttention 好一个与稀疏比率成比例的因子。我们在第 5 节讨论了扩展到其他操作（多 GPU 上的注意力、核回归、块稀疏矩阵
-
+![1](https://github.com/wangshaocong92/develop/blob/master/doc/paper/image/img_v3_02r2_2db12976-caae-4550-8200-0756047c6a8g.jpg)
 图 1：**左：** FlashAttention 使用平铺来防止在（相对）较慢的 GPU HBM 上具体化大的 \(N\times N\) 注意力矩阵（虚线框）。在外层循环（红色箭头）中，FlashAttention 遍历 **K** 和 **V** 矩阵的块并将其加载到快速的片上 SRAM。在每个块中，FlashAttention 遍历 **Q** 矩阵的块（蓝色箭头），将其加载到 SRAM，并将注意力计算的输出写回 HBM。**右：** 在 GPT-2 上相对于 PyTorch 注意力实现的速度提升。FlashAttention 不读写大的 \(N\times N\) 注意力矩阵到 HBM，从而在注意力计算上实现了 \(7.6\times\) 的加速。
 乘法）的进一步扩展。我们开源 FlashAttention 以便更容易地基于此原语进行构建。¹
 
