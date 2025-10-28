@@ -10,5 +10,8 @@ fi
 
 cd $BUILD_PATH
 conan install $PROJECT_PATH --build=missing
-cmake $PROJECT_PATH -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$(pwd) -DCMAKE_VERBOSE_MAKEFILE=ON
-make -j$(nproc)
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$(pwd) -DCMAKE_VERBOSE_MAKEFILE=ON  -DCMAKE_INSTALL_PREFIX=$PROJECT_PATH/install $PROJECT_PATH
+ninja -j$(nproc)
+ninja install
+
+cp $PROJECT_PATH/build/compile_commands.json $PROJECT_PATH/

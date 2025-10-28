@@ -7,3 +7,12 @@
 [submodule "doc/cuda_code"]
 	path = doc/cuda_code
 	url = https://github.com/xgqdut2016/cuda_code
+[submodule "doc/flash_attention"]
+	path = doc/flash_attention
+	url = https://github.com/Dao-AILab/flash-attention
+[submodule "doc/LeetCUDA"]
+	path = doc/LeetCUDA
+	url = https://github.com/xlite-dev/LeetCUDA
+[submodule "3rdparty/cutlass"]
+	path = 3rdparty/cutlass
+	url = https://github.com/NVIDIA/cutlass

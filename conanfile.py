@@ -84,7 +84,7 @@ class DevelopConan(ConanFile):
         self.requires("numcpp/2.12.1")
         self.requires("zlib/1.2.13")
         self.requires("osqp/0.6.3")
-
+        self.requires("cutlass/3.5.1")
         self.requires("xz_utils/5.4.5")
         self.requires("sml/1.1.11")
         self.requires("readerwriterqueue/1.0.6")

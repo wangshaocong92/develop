@@ -18,7 +18,11 @@ set(CMAKE_CUDA_ARCHITECTURES "89")
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX $ENV{PROJECT_PATH}/install CACHE PATH "Install path prefix" FORCE)
 endif()
+
 add_subdirectory(kernel)
+
+
+add_subdirectory(example/cutlass)
 
 
 
