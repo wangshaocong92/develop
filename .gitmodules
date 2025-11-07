@@ -16,3 +16,6 @@
 [submodule "3rdparty/cutlass"]
 	path = 3rdparty/cutlass
 	url = https://github.com/NVIDIA/cutlass
+[submodule "doc/cute-gemm"]
+	path = doc/cute-gemm
+	url = https://github.com/reed-lau/cute-gemm.git
