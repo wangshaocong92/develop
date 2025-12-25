@@ -1,7 +1,7 @@
 # CuTe Layout Algebra 
 ## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Introduction "Introduction")Introduction 
 
-[CuTe layout algebra](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md){target="_blank" rel="noopener"} is extremely important for understanding and applying [CUTLASS](https://github.com/NVIDIA/cutlass/){target="_blank" rel="noopener"} for accelerated computing. Despite the fact that CuTe has a [documentation](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md){target="_blank" rel="noopener"} for its layout algebra, it cannot be understood completely without first understanding its mathematical foundations. I tried to create some proofs for the CuTe layout algebra on my own and realized that it was a huge amount of work. Gratefully, [Jay Shah](https://research.colfax-intl.com/author/jay-shah/){target="_blank" rel="noopener"} has created a paper ["A Note on the Algebra of CuTe Layouts"](https://leimao.github.io/downloads/article/2024-10-20-CuTe-Layout-Algebra/layout_algebra.pdf) that completes the CuTe layout algebra mathematical foundations that I wanted to create.
+[CuTe layout algebra](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md) is extremely important for understanding and applying [CUTLASS](https://github.com/NVIDIA/cutlass/) for accelerated computing. Despite the fact that CuTe has a [documentation](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md) for its layout algebra, it cannot be understood completely without first understanding its mathematical foundations. I tried to create some proofs for the CuTe layout algebra on my own and realized that it was a huge amount of work. Gratefully, [Jay Shah](https://research.colfax-intl.com/author/jay-shah/) has created a paper ["A Note on the Algebra of CuTe Layouts"](https://leimao.github.io/downloads/article/2024-10-20-CuTe-Layout-Algebra/layout_algebra.pdf) that completes the CuTe layout algebra mathematical foundations that I wanted to create.
 
 As my proofreading, I found Jay Shah's paper mostly error-free, except for a few very minor oversights and typos. However, it does skip some details without which the paper is a little bit hard to understand. In this article, based on Jay Shah's paper, I would like to provide more proofs and explanations of the CuTe layout algebra, some of which are not present in Jay Shah's paper. Most of the definitions and annotations will follow Jay Shah's paper.
 
@@ -35,7 +35,7 @@ Inductively, given layouts $L_{0},L_{1},\ldots,L_{N}$, we can then form the conc
 
 ### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Isomorphism "Isomorphism")Isomorphism 
 
-Let $\mathbf{S} = (M_{0},M_{1},\ldots,M_{\alpha})$ and $\mathbf{D} = (d_{0},d_{1},\ldots,d_{\alpha})$ be the respective shape and stride tuples of $L = \mathbf{S}:\mathbf{D}$. Let $M = M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha}$ be the size of $L$ and let $\lbrack 0,M) \subset \mathbb{N}$ be the subset of the natural numbers given by $0,1,2,\ldots,M - 1$. Then we have an [isomorphism](https://en.wikipedia.org/wiki/Isomorphism){target="_blank" rel="noopener"}
+Let $\mathbf{S} = (M_{0},M_{1},\ldots,M_{\alpha})$ and $\mathbf{D} = (d_{0},d_{1},\ldots,d_{\alpha})$ be the respective shape and stride tuples of $L = \mathbf{S}:\mathbf{D}$. Let $M = M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha}$ be the size of $L$ and let $\lbrack 0,M) \subset \mathbb{N}$ be the subset of the natural numbers given by $0,1,2,\ldots,M - 1$. Then we have an [isomorphism](https://en.wikipedia.org/wiki/Isomorphism)
 
 $$\begin{array}{r}
 {\iota:\lbrack 0,M) \cong \lbrack 0,M_{0}) \times \lbrack 0,M_{1}) \times \ldots \times \lbrack 0,M_{\alpha})}
@@ -1300,7 +1300,7 @@ Note that the second condition is the left divisibility, instead of the weak lef
 
 For example, suppose $A = (8,6,8):(1,16,108)$ and $B = (8):(4)$. According to Definition 2.12, $A \circ B = (2,4):(4,16)$. However, if we run composition for $A$ and $B$ in CUTLASS, we will encounter an error because CUTLASS requires left divisibility for the second condition.
 
-More specifically, in the [CUTLASS composition layout algebra implementation](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md#computing-composition){target="_blank" rel="noopener"}, we have
+More specifically, in the [CUTLASS composition layout algebra implementation](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md#computing-composition), we have
 
 <figure id="code-1766573911346145" class="highlight c++ hljs">
 <div class="highlight-body">
@@ -1436,7 +1436,7 @@ $$\begin{array}{r}
 {\varphi:\lbrack 0,\beta\rbrack\overset{\cong}{\rightarrow}\lbrack 0,\beta\rbrack}
 \end{array}$$
 
-be the [automorphism](https://en.wikipedia.org/wiki/Automorphism){target="_blank" rel="noopener"} such that $B^{\varphi}:=(N_{\varphi(0)},N_{\varphi(1)},\ldots,N_{\varphi(\beta)}):(r_{\varphi(0)},r_{\varphi(1)},\ldots,r_{\varphi(\beta)})$ is sorted.
+be the [automorphism](https://en.wikipedia.org/wiki/Automorphism) such that $B^{\varphi}:=(N_{\varphi(0)},N_{\varphi(1)},\ldots,N_{\varphi(\beta)}):(r_{\varphi(0)},r_{\varphi(1)},\ldots,r_{\varphi(\beta)})$ is sorted.
 
 Then by Definition 2.6, we have
 
@@ -1680,7 +1680,7 @@ Similar to logical division, the logical product $A \times B$ informs the us wha
 
 ## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Permutation-Expressible-As-Layout-Functions "Permutation Expressible As Layout Functions")Permutation Expressible As Layout Functions 
 
-This section explains how to retrieve all permutations that are expressible as layout functions in a structured way. This is important because some permutation algebra used in CUTLASS and CuTe, such as swizzle, does not seem to be expressed as layout function. The basic language of [category theory](https://en.wikipedia.org/wiki/Category_theory){target="_blank" rel="noopener"} is used to describe the process.
+This section explains how to retrieve all permutations that are expressible as layout functions in a structured way. This is important because some permutation algebra used in CUTLASS and CuTe, such as swizzle, does not seem to be expressed as layout function. The basic language of [category theory](https://en.wikipedia.org/wiki/Category_theory) is used to describe the process.
 
 ### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-1-Ordered-Factorization "Definition 3.1 Ordered Factorization")Definition 3.1 Ordered Factorization 
 
@@ -1703,7 +1703,7 @@ $$\begin{array}{r}
 {E^{\alpha} = \lbrack p_{\alpha(1)}\ldots p_{\alpha(n)}\rbrack\overset{\alpha_{E}}{\rightarrow}E = \lbrack p_{1}\ldots p_{k}\rbrack}
 \end{array}$$
 
-in $\textbf{Fact}$. This defines the set of all morphisms with [codomain](https://en.wikipedia.org/wiki/Codomain){target="_blank" rel="noopener"} $E$, and ranging over all $E$ thus defines the set of all morphisms in $\textbf{Fact}$.
+in $\textbf{Fact}$. This defines the set of all morphisms with [codomain](https://en.wikipedia.org/wiki/Codomain) $E$, and ranging over all $E$ thus defines the set of all morphisms in $\textbf{Fact}$.
 
 3.  The composition of morphisms is defined as follows. Suppose we have morphisms of finite sets $\alpha:\underset{―}{n} \rightarrow \underset{―}{k}$ and $\beta:\underset{―}{m} \rightarrow \underset{―}{n}$, and expressions $E = \lbrack p_{1}\ldots p_{k}\rbrack$. Write
 
@@ -1747,9 +1747,9 @@ Therefore, $\text{id}_{\underset{―}{n}}$ is the identity morphism for $\unders
 
 ### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Notation-3-5 "Notation 3.5")Notation 3.5 
 
-Let $\Sigma_{k}$ denote the [symmetric group](https://en.wikipedia.org/wiki/Symmetric_group){target="_blank" rel="noopener"} on $k$ letters. Given an element $\varphi \in \Sigma_{k}$, we also denote the associated automorphism of $\underset{―}{k}$ by $\varphi$.
+Let $\Sigma_{k}$ denote the [symmetric group](https://en.wikipedia.org/wiki/Symmetric_group) on $k$ letters. Given an element $\varphi \in \Sigma_{k}$, we also denote the associated automorphism of $\underset{―}{k}$ by $\varphi$.
 
-In mathematics, a [group](https://en.wikipedia.org/wiki/Group_(mathematics)){target="_blank" rel="noopener"} is a set with an operation that associates an element of the set to every pair of elements of the set (as does every binary operation) and satisfies the following constraints: the operation is associative, it has an identity element, and every element of the set has an inverse element.
+In mathematics, a [group](https://en.wikipedia.org/wiki/Group_(mathematics)) is a set with an operation that associates an element of the set to every pair of elements of the set (as does every binary operation) and satisfies the following constraints: the operation is associative, it has an identity element, and every element of the set has an inverse element.
 
 In this sense, the symmetric group is a set of all permutations of a set of $k$ elements with an operation of composition of permutations (applying one permutation after another).
 
@@ -1759,9 +1759,9 @@ Suppose $E = \lbrack 232\rbrack$. Then the transposition $\sigma = (13) \in \Sig
 
 ### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-7 "Remark 3.7")Remark 3.7 
 
-Let $\textbf{FinSet}$ denote the category of finite sets (or rather a skeleton, with objects given by the sets $\underset{―}{n}$ for $n \geq 0$). Given an object $\underset{―}{k} \in \textbf{FinSet}$, let $\textbf{FinSet}^{/\underset{―}{k}}$ denote the [overcategory](https://en.wikipedia.org/wiki/Overcategory){target="_blank" rel="noopener"}, whose objects are morphisms $\lbrack\alpha:\underset{―}{n} \rightarrow \underset{―}{k}\rbrack$ and whose morphisms are commuting triangles. Recall that this category has a [final object](https://en.wikipedia.org/wiki/Initial_and_terminal_objects){target="_blank" rel="noopener"} given by the identity morphism $\lbrack\text{id}_{\underset{―}{k}}\rbrack$.
+Let $\textbf{FinSet}$ denote the category of finite sets (or rather a skeleton, with objects given by the sets $\underset{―}{n}$ for $n \geq 0$). Given an object $\underset{―}{k} \in \textbf{FinSet}$, let $\textbf{FinSet}^{/\underset{―}{k}}$ denote the [overcategory](https://en.wikipedia.org/wiki/Overcategory), whose objects are morphisms $\lbrack\alpha:\underset{―}{n} \rightarrow \underset{―}{k}\rbrack$ and whose morphisms are commuting triangles. Recall that this category has a [final object](https://en.wikipedia.org/wiki/Initial_and_terminal_objects) given by the identity morphism $\lbrack\text{id}_{\underset{―}{k}}\rbrack$.
 
-Then for every expression $E = \lbrack p_{1}\ldots p_{k}\rbrack$ of length $k$, we have a [functor](https://en.wikipedia.org/wiki/Functor){target="_blank" rel="noopener"}
+Then for every expression $E = \lbrack p_{1}\ldots p_{k}\rbrack$ of length $k$, we have a [functor](https://en.wikipedia.org/wiki/Functor)
 
 $$\begin{array}{r}
 {F_{E}:\textbf{FinSet}^{/\underset{―}{k}} \rightarrow \textbf{Fact}}
@@ -1777,7 +1777,7 @@ In this case, given an object of morphism $\lbrack\alpha:\underset{―}{n} \righ
 
 Given $\underset{―}{k} = \{ 1,2,\ldots,k\}$, the identity morphism maps $i \in \underset{―}{k}$ to $i \in \underset{―}{k}$. Given a morphism $\lbrack\alpha:\underset{―}{n} \rightarrow \underset{―}{k}\rbrack$, in which without loss of generality we assume $\alpha(i) = i$ for all $i \in \lbrack 1,k\rbrack$, the remaining morphism $\lbrack\gamma:\underset{―}{k} \rightarrow \underset{―}{n}\rbrack$ must have $i = \alpha(i)$ for all $i \in \lbrack 1,k\rbrack$, so that we have a commuting triangle that $i \in \underset{―}{k}\overset{\gamma}{\rightarrow}\overset{\alpha}{\rightarrow}i \in \underset{―}{k}$. Otherwise, for the remaining morphism $\lbrack\gamma:\underset{―}{k} \rightarrow \underset{―}{n}\rbrack$, if there exists an $i \in \underset{―}{k}$ such that $i \neq \alpha(i)$, then the commuting triangle will not be valid because $i \in \underset{―}{k}\overset{\gamma}{\rightarrow}\overset{\alpha}{\rightarrow}j \in \underset{―}{k}$ and $i \neq j$. Therefore, the morphism of commuting triangle is unique.
 
-By [definition](https://en.wikipedia.org/wiki/Functor#Definition){target="_blank" rel="noopener"}, let $C$ and $D$ be categories. A functor $F$ from $C$ to $D$ is a mapping that
+By [definition](https://en.wikipedia.org/wiki/Functor#Definition), let $C$ and $D$ be categories. A functor $F$ from $C$ to $D$ is a mapping that
 
 -   associates each object $X$ in $C$ to an object $F(X)$ in $D$,
 -   associates each morphism $f:X \rightarrow Y$ in $C$ to a morphism $F(f):F(X) \rightarrow F(Y)$ in $D$ such that
@@ -1790,7 +1790,7 @@ In the category $\textbf{Fact}$, by the functor $F_{E}$, we have $F_{E}(X) = E^{
 
 ### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-8 "Remark 3.8")Remark 3.8 
 
-In fact, we can identify $\textbf{Fact}$ itself as a certain overcategory (or rather, a full [subcategory](https://en.wikipedia.org/wiki/Subcategory){target="_blank" rel="noopener"} thereof). Namely, let $\mathcal{P}$ denote the the infinite set of primes $\{ 2,3,5\ldots\}$, let $\textbf{Set}$ be the category of sets, and let $\textbf{FinSet}^{/\mathcal{P}}$ be the full subcategory of $\textbf{Set}^{/\mathcal{P}}$ on those morphisms $X\overset{}{\rightarrow}\mathcal{P}$ where $X$ is a finite set. Then we have an equivalence of categories
+In fact, we can identify $\textbf{Fact}$ itself as a certain overcategory (or rather, a full [subcategory](https://en.wikipedia.org/wiki/Subcategory) thereof). Namely, let $\mathcal{P}$ denote the the infinite set of primes $\{ 2,3,5\ldots\}$, let $\textbf{Set}$ be the category of sets, and let $\textbf{FinSet}^{/\mathcal{P}}$ be the full subcategory of $\textbf{Set}^{/\mathcal{P}}$ on those morphisms $X\overset{}{\rightarrow}\mathcal{P}$ where $X$ is a finite set. Then we have an equivalence of categories
 
 $$\begin{array}{r}
 {\textbf{Fact} \simeq \textbf{FinSet}^{/\mathcal{P}}}
@@ -1850,7 +1850,7 @@ $$\begin{matrix}
 {\lbrack 0,N^{\alpha})} & {\cong \lbrack 0,p_{\alpha(1)}) \times \lbrack 0,p_{\alpha(2)}) \times \ldots \times \lbrack 0,p_{\alpha(n)})}
 \end{matrix}$$
 
-Then the associated layout function $f_{(E,\alpha)}:\lbrack 0,N^{\alpha}) \rightarrow \lbrack 0,N) \subset \mathbb{N}$ can be described as the [multilinear function](https://en.wikipedia.org/wiki/Multilinear_map){target="_blank" rel="noopener"}
+Then the associated layout function $f_{(E,\alpha)}:\lbrack 0,N^{\alpha}) \rightarrow \lbrack 0,N) \subset \mathbb{N}$ can be described as the [multilinear function](https://en.wikipedia.org/wiki/Multilinear_map)
 
 $$\begin{array}{r}
 {\lbrack 0,p_{\alpha(1)}) \times \lbrack 0,p_{\alpha(2)}) \times \ldots \times \lbrack 0,p_{\alpha(n)})\overset{}{\rightarrow}\lbrack 0,p_{1}) \times \lbrack 0,p_{2}) \times \ldots \times \lbrack 0,p_{k})}
