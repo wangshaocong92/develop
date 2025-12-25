@@ -1,5 +1,5 @@
-# CuTe Layout Algebra {#cute-layout-algebra .title .is-size-3 style="font-family: 'PT Sans Narrow', sans-serif"}
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Introduction "Introduction"){.headerlink}Introduction {#Introduction style="scroll-margin: 1em;"}
+# CuTe Layout Algebra 
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Introduction "Introduction")Introduction 
 
 [CuTe layout algebra](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md){target="_blank" rel="noopener"} is extremely important for understanding and applying [CUTLASS](https://github.com/NVIDIA/cutlass/){target="_blank" rel="noopener"} for accelerated computing. Despite the fact that CuTe has a [documentation](https://github.com/NVIDIA/cutlass/blob/v3.5.1/media/docs/cute/02_layout_algebra.md){target="_blank" rel="noopener"} for its layout algebra, it cannot be understood completely without first understanding its mathematical foundations. I tried to create some proofs for the CuTe layout algebra on my own and realized that it was a huge amount of work. Gratefully, [Jay Shah](https://research.colfax-intl.com/author/jay-shah/){target="_blank" rel="noopener"} has created a paper ["A Note on the Algebra of CuTe Layouts"](https://leimao.github.io/downloads/article/2024-10-20-CuTe-Layout-Algebra/layout_algebra.pdf) that completes the CuTe layout algebra mathematical foundations that I wanted to create.
 
@@ -7,15 +7,15 @@ As my proofreading, I found Jay Shah's paper mostly error-free, except for a few
 
 This article can be read as a complement to Jay Shah's paper, but it's also completely standalone for understanding the CuTe layout algebra.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Layout-Algebra-Preliminaries "Layout Algebra Preliminaries"){.headerlink}Layout Algebra Preliminaries {#Layout-Algebra-Preliminaries style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Layout-Algebra-Preliminaries "Layout Algebra Preliminaries")Layout Algebra Preliminaries 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-1-Layout "Definition 2.1: Layout"){.headerlink}Definition 2.1: Layout {#Definition-2-1-Layout style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-1-Layout "Definition 2.1: Layout")Definition 2.1: Layout 
 
 A *layout* $L$ is a pair of positive integer tuples $\mathbf{S}$ and $\mathbf{D}$ of matching dimensions. We call $\mathbf{S}$ the *shape* and $\mathbf{D}$ the *stride*. We write $L = \mathbf{S}:\mathbf{D}$.
 
 A flattened layout means that there is no internal parentheses in the shape and stride. For example, $L = (5,2,2):(16,80,4)$ is a flattened layout, whereas $L = (5,(2,2)):(16,(80,4))$ is not. Flattening a layout will not change the semantics and operations of the layout.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-2-Layout-Size-Length-and-Mode "Definition 2.2: Layout Size, Length, and Mode"){.headerlink}Definition 2.2: Layout Size, Length, and Mode {#Definition-2-2-Layout-Size-Length-and-Mode style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-2-Layout-Size-Length-and-Mode "Definition 2.2: Layout Size, Length, and Mode")Definition 2.2: Layout Size, Length, and Mode 
 
 Let $\alpha \geq 0$ be an integer and $L = \mathbf{S}:\mathbf{D} = (M_{0},M_{1},\ldots,M_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$ be a layout. Then:
 
@@ -23,7 +23,7 @@ Let $\alpha \geq 0$ be an integer and $L = \mathbf{S}:\mathbf{D} = (M_{0},M_{1},
 -   The *length* of $L$ is the integer $\alpha + 1$.
 -   A *mode* of $L$ is one of the entries $(M_{k}):(d_{k})$ for $0 \leq k \leq \alpha$. We may regard this as a length 1 layout.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Concatenation "Concatenation"){.headerlink}Concatenation {#Concatenation style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Concatenation "Concatenation")Concatenation 
 
 Given two layouts $L = \mathbf{S}:\mathbf{D}$ and $L^{\prime} = \mathbf{S}^{\prime}:\mathbf{D}^{\prime}$, let $\mathbf{S}^{\prime\prime}$ and $\mathbf{D}^{\prime\prime}$ be the shape and stride tuples given by (the flattening of) $(\mathbf{S},\mathbf{S}^{\prime})$ and $(\mathbf{D},\mathbf{D}^{\prime})$ respectively. Then the *concatenation* of $L$ and $L^{\prime}$ is given by the layout
 
@@ -33,7 +33,7 @@ and we say that $(L,L^{\prime})$ is decomposed by $L$ and $L^{\prime}$.
 
 Inductively, given layouts $L_{0},L_{1},\ldots,L_{N}$, we can then form the concatenation $(L_{0},L_{1},\ldots,L_{N})$. Conversely, given $L$ a layout, $L$ is maximally decomposed by its modes.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Isomorphism "Isomorphism"){.headerlink}Isomorphism {#Isomorphism style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Isomorphism "Isomorphism")Isomorphism 
 
 Let $\mathbf{S} = (M_{0},M_{1},\ldots,M_{\alpha})$ and $\mathbf{D} = (d_{0},d_{1},\ldots,d_{\alpha})$ be the respective shape and stride tuples of $L = \mathbf{S}:\mathbf{D}$. Let $M = M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha}$ be the size of $L$ and let $\lbrack 0,M) \subset \mathbb{N}$ be the subset of the natural numbers given by $0,1,2,\ldots,M - 1$. Then we have an [isomorphism](https://en.wikipedia.org/wiki/Isomorphism){target="_blank" rel="noopener"}
 
@@ -57,7 +57,7 @@ It's straightforward to verify the above isomorphism mapping is valid and proof 
 
 One could imagine the isomorphism as a mapping between a one-dimensional coordinate and a multi-dimensional coordinate.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-3-Layout-Function "Definition 2.3: Layout Function"){.headerlink}Definition 2.3: Layout Function {#Definition-2-3-Layout-Function style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-3-Layout-Function "Definition 2.3: Layout Function")Definition 2.3: Layout Function 
 
 Given a layout $L$, its *layout function* is the function $f_{L}:\lbrack 0,M) \rightarrow \mathbb{N}$ is defined to be the composite
 
@@ -116,7 +116,7 @@ $$\begin{matrix}
  & {= 7}
 \end{matrix}$$
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Extension-of-Layout-Function "Extension of Layout Function"){.headerlink}Extension of Layout Function {#Extension-of-Layout-Function style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Extension-of-Layout-Function "Extension of Layout Function")Extension of Layout Function 
 
 Based on the [definition of layout function](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-3-Layout-Function), the extension of the layout function $f_{L}$ is the function, ${\hat{f}}_{L}:\mathbb{N} \rightarrow \mathbb{N}$, defined by replacing $M_{\alpha}$ with $\infty$ in the definition of $f_{L}$, i.e., the composite
 
@@ -138,11 +138,11 @@ $$\begin{array}{r}
 
 One could imagine the extension of the isomorphism defines the last dimension of the shape to be a "batch" dimension and the batch size can be infinite.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Coalescence "Coalescence"){.headerlink}Coalescence {#Coalescence style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Coalescence "Coalescence")Coalescence 
 
 Coalescence simplifies the layout and does not change the layout function.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Coalescence-Rules "Coalescence Rules"){.headerlink}Coalescence Rules {#Coalescence-Rules style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Coalescence-Rules "Coalescence Rules")Coalescence Rules 
 
 Considering a layout with just two integral modes, $A = (N_{0},N_{1}):(d_{0},d_{1})$, we have four cases to consider:
 
@@ -210,21 +210,21 @@ Therefore, the layout function remains the same after coalescing $A$ to $A^{\pri
 
 This concludes the proof.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Coalescence "By-Mode Coalescence"){.headerlink}By-Mode Coalescence {#By-Mode-Coalescence style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Coalescence "By-Mode Coalescence")By-Mode Coalescence 
 
 In some cases, when the modes are not completely integral in the layout and we would like to keep the number of modes unchanged, we could perform *by-mode coalescence*. This can be achieved by disabling the coalescence of adjacent integral modes from two different modes in the coalescence rules for any layout with more than two integral modes.
 
 For example, if we have a layout of two modes $A = ((N_{0},N_{1},\ldots,N_{\alpha}),(N_{\alpha + 1},N_{\alpha + 2},\ldots,N_{\beta}):((d_{0},d_{1},\ldots,d_{\alpha}),(d_{\alpha + 1},d_{\alpha + 2},\ldots,d_{\beta})))$, to perform by-mode coalescence, we could coalesce the integral modes $(N_{0},N_{1},\ldots,N_{\alpha})$ and $(N_{\alpha + 1},N_{\alpha + 2},\ldots,N_{\beta})$ separately until no more coalescence is possible for each one, and no more coalescence will be performed further between the two consequent coalesced modes even if they can be coalesced. This will result in a layout with the same number of modes as before.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Coalescence "Implication of Coalescence"){.headerlink}Implication of Coalescence {#Implication-of-Coalescence style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Coalescence "Implication of Coalescence")Implication of Coalescence 
 
 Coalescence simplifies the layout and does not change the layout function. It is a useful operation to reduce the complexity of the layout and the related computation while preserving its functionality. If non-by-mode coalescence is performed on a layout, the layout can be simplified such that each mode is an integral mode, i.e., $A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$ where $N_{k}$ is an integer, not a tuple of integers, and $N_{k} > 1$ for $k \in \lbrack 0,\alpha\rbrack$.
 
 The property of coalescence is very important and most of the proofs we will present in the article assumes that the layout is coalesced. This assumption is fine mathematically because the coalescence does not change the layout function.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Complementation "Complementation"){.headerlink}Complementation {#Complementation style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Complementation "Complementation")Complementation 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-4-Sorted-Layout "Definition 2.4: Sorted Layout"){.headerlink}Definition 2.4: Sorted Layout {#Definition-2-4-Sorted-Layout style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-4-Sorted-Layout "Definition 2.4: Sorted Layout")Definition 2.4: Sorted Layout 
 
 Let $A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$ be a layout. We say that $A$ is *sorted* if $d_{0} \leq d_{1} \leq \ldots \leq d_{\alpha}$ and for every $i < j$, if $d_{i} = d_{j}$, then $N_{i} \leq N_{j}$.
 
@@ -258,7 +258,7 @@ We could see that the layout $B$ is typically referred as the column-major layou
 
 More generally, the sorted layout is a just like the "generalization" of the column-major layout.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-5-Admission-for-Complementation "Definition 2.5: Admission for Complementation"){.headerlink}Definition 2.5: Admission for Complementation {#Definition-2-5-Admission-for-Complementation style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-5-Admission-for-Complementation "Definition 2.5: Admission for Complementation")Definition 2.5: Admission for Complementation 
 
 Let $A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$ be a layout and $M$ be a positive integer. If $A$ is not sorted then replace $A$ with its sorted version. We say that the pair $\{ A,M\}$ is *admissible for complementation* (or simply admissible) if:
 
@@ -270,7 +270,7 @@ That $\{ A,M\}$ is admissible for complementation also implies:
 -   For all $1 \leq i \leq \alpha$, $N_{i - 1} \cdot d_{i - 1} \leq d_{i}$ and $d_{i - 1} \leq d_{i}$.
 -   $N_{\alpha} \cdot d_{\alpha} \leq M$ and $d_{\alpha} \leq M$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-6-Complementation "Definition 2.6: Complementation"){.headerlink}Definition 2.6: Complementation {#Definition-2-6-Complementation style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-6-Complementation "Definition 2.6: Complementation")Definition 2.6: Complementation 
 
 Let $A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$ be a layout and $M$ be a positive integer. If $\{ A,M\}$ is admissible for complementation, then if $A$ is not sorted, replace $A$ with its sorted version. The complement of $\{ A,M\}$ is defined to be the layout
 
@@ -365,7 +365,7 @@ This concludes the proof.
 
 Similarly, we could also prove that the extension of the complement of $\{ A,M\}$ is strictly increasing.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-2-7 "Proposition 2.7"){.headerlink}Proposition 2.7 {#Proposition-2-7 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-2-7 "Proposition 2.7")Proposition 2.7 
 
 Let $\{ A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha}),M\}$ be admissible for complementation and $B = \text{complement}(A,M)$. Let $C = (A,B)$ be the concatenated layout. Then the size of $C$ is $M$ and $f_{C}:\lbrack 0,M) \rightarrow \mathbb{N}$ restricts to a bijection $\lbrack 0,M) \cong \lbrack 0,M)$.
 
@@ -452,7 +452,7 @@ Therefore $f_{C^{\prime}}:\lbrack 0,M) \rightarrow \mathbb{N}$ restricts to a bi
 
 This concludes the proof.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Corollary-2-8-Complementation-Disjointness "Corollary 2.8 Complementation Disjointness"){.headerlink}Corollary 2.8 Complementation Disjointness {#Corollary-2-8-Complementation-Disjointness style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Corollary-2-8-Complementation-Disjointness "Corollary 2.8 Complementation Disjointness")Corollary 2.8 Complementation Disjointness 
 
 The Corollary 2.8 explains what it means of taking a complement of a layout.
 
@@ -589,7 +589,7 @@ This concludes the proof.
 
 A short note on the original proof of Corollary 2.8 in the [paper](https://leimao.github.io/downloads/article/2024-10-20-CuTe-Layout-Algebra/layout_algebra.pdf) is that Jay Shah claimed $f_{A}(I \cap J) \cap f_{B}(I \cap J) = \{ 0\}$, which is insufficient to show the proof. The sufficient statement should be $f_{A}(I) \cap f_{B}(J) = \{ 0\}$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-2-9-Complementation-Disjointness-Ordering-and-Boundedness "Remark 2.9 Complementation Disjointness, Ordering, and Boundedness"){.headerlink}Remark 2.9 Complementation Disjointness, Ordering, and Boundedness {#Remark-2-9-Complementation-Disjointness-Ordering-and-Boundedness style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-2-9-Complementation-Disjointness-Ordering-and-Boundedness "Remark 2.9 Complementation Disjointness, Ordering, and Boundedness")Remark 2.9 Complementation Disjointness, Ordering, and Boundedness 
 
 The complement $B$ of a layout $A$ with respect to an integer $M$ should satisfy three properties:
 
@@ -660,17 +660,17 @@ Because $a$ and $k$ are both integers and $0 \leq k < a$, we have $a - k \geq 1$
 
 This concludes the proof.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Non-Integral-Layout-Complementation "Non-Integral Layout Complementation"){.headerlink}Non-Integral Layout Complementation {#Non-Integral-Layout-Complementation style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Non-Integral-Layout-Complementation "Non-Integral Layout Complementation")Non-Integral Layout Complementation 
 
 All the properties and proofs of complementation above assumes that the layout being complemented is a layout whose mode is integral, i.e., $A = (N_{0},N_{1},\ldots,N_{\alpha}):(d_{0},d_{1},\ldots,d_{\alpha})$. In the case where the layout is non-integral, i.e., some of the modes are not integers, the layout shall be coalesced to an integral layout before the complementation is applied. This is valid because coalescence does not change the layout function.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Complementation "Implication of Complementation"){.headerlink}Implication of Complementation {#Implication-of-Complementation style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Complementation "Implication of Complementation")Implication of Complementation 
 
 The complementation of a layout finds a complement layout with a positive integer so that when the two layouts are concatenated, such as $\left( B,\text{complement}(B,M) \right)$, the new layout is a bijection $\lbrack 0,M) \cong \lbrack 0,M)$. This is also saying, if the original layout is repeated using the complement layout, the new layout is still a bijection.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Composition "Composition"){.headerlink}Composition {#Composition style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Composition "Composition")Composition 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-11-Left-Divisibility "Definition 2.11 Left Divisibility"){.headerlink}Definition 2.11 Left Divisibility {#Definition-2-11-Left-Divisibility style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-11-Left-Divisibility "Definition 2.11 Left Divisibility")Definition 2.11 Left Divisibility 
 
 Let $M,d > 0$ be positive integers and let $M = M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha}$ be a given factorization of $M$ by integers $M_{k} > 1$ for $k \in \lbrack 0,\alpha\rbrack$. Replacing $M_{\alpha}$ by $\infty$, let
 
@@ -799,7 +799,7 @@ Notice that in the proof of the uniqueness of division index $i$, we have never 
 
 Also notice that ${\hat{M}}^{\prime}$ with its induced factorization can itself be considered for left divisibility or weak left divisibility (with the step or replacing the last factor by $\infty$ now being superfluous). More specifically, because ${\hat{M}}^{\prime} > 0$, ${\hat{M}}_{j}^{\prime} > 1$ for $j \in \lbrack 0,\alpha - i - 1\rbrack$, and ${\hat{M}}^{\prime} = {\hat{M}}_{0}^{\prime} \cdot {\hat{M}}_{1}^{\prime} \cdot \ldots \cdot {\hat{M}}_{\alpha - i - 1}^{\prime} \cdot \infty$, given another positive integer $d^{\prime} > 0$, we could completely test whether the properties of left divisibility or weak left divisibility hold for ${\hat{M}}^{\prime}$ with respect to $d^{\prime}$. Replacing the last factor by $\infty$ is not necessary as it is already $\infty$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-12-Admission-for-Composition-Restricted-Case "Definition 2.12 Admission for Composition - Restricted Case"){.headerlink}Definition 2.12 Admission for Composition - Restricted Case {#Definition-2-12-Admission-for-Composition-Restricted-Case style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-12-Admission-for-Composition-Restricted-Case "Definition 2.12 Admission for Composition - Restricted Case")Definition 2.12 Admission for Composition - Restricted Case 
 
 We first consider composition in the restricted case of length 1 layouts for the second layout.
 
@@ -808,7 +808,7 @@ Let $\mathbf{S} = (M_{0},M_{1},\ldots,M_{\alpha})$ be a shape tuple, let $M = M_
 1.  $M$ is left divisible by $r$. Write $\hat{M} = r \cdot {\hat{M}}^{\prime}$.
 2.  With respect to its induced factorization, ${\hat{M}}^{\prime}$ is weakly left divisible by $N$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-13-Composition-Restricted-Case "Definition 2.13 Composition - Restricted Case"){.headerlink}Definition 2.13 Composition - Restricted Case {#Definition-2-13-Composition-Restricted-Case style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-13-Composition-Restricted-Case "Definition 2.13 Composition - Restricted Case")Definition 2.13 Composition - Restricted Case 
 
 The idea of admissibility is that the composition $A \circ B$ of layouts will entail "dividing $B$ along the modes of $A$". More preciously, we have the following:
 
@@ -863,7 +863,7 @@ Let's then consider the case of $i = \alpha$. We have $r = M_{0} \cdot M_{1} \cd
 
 Note that by this definition, $\text{size}(A \circ B) = \text{size}(B)$. This is a critical property which we will use later.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-2-14 "Proposition 2.14"){.headerlink}Proposition 2.14 {#Proposition-2-14 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-2-14 "Proposition 2.14")Proposition 2.14 
 
 In the situation of Definition 2.13, we have that $f_{A \circ B} = {\hat{f}}_{A} \circ f_{B}$.
 
@@ -1086,11 +1086,11 @@ It's not too difficult to show that we still have $f_{A \circ B} = {\hat{f}}_{A}
 
 However, the critical property $\text{size}(A \circ B) = \text{size}(B)$ will not hold in this case. As we will see later, without having this property, $f_{A \circ B} = {\hat{f}}_{A} \circ f_{B}$ cannot be true when $B$ is multi-modal, i.e., the length of $B$ is greater than 1.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-16-Interval-of-Definition "Definition 2.16 Interval of Definition"){.headerlink}Definition 2.16 Interval of Definition {#Definition-2-16-Interval-of-Definition style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-16-Interval-of-Definition "Definition 2.16 Interval of Definition")Definition 2.16 Interval of Definition 
 
 In the situation of Definition 2.12, where layout $B$ is of length 1, let $f_{B}:\lbrack 0,N) \rightarrow \mathbb{N}$ be the layout function, and let $I = \lbrack r,r(N - 1)\rbrack$ be the interval given by the convex closure of the image $f_{B}(\lbrack 1,N))$. Let $M^{\prime} = M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}$ and $J = I \cap \lbrack 1,M^{\prime})$ (so $J = \varnothing$ if $\alpha = 0$). Then the *interval of definition* for $\{\mathbf{S},B\}$ is $J$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-17-Composition-General-Case "Definition 2.17 Composition - General Case"){.headerlink}Definition 2.17 Composition - General Case {#Definition-2-17-Composition-General-Case style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-17-Composition-General-Case "Definition 2.17 Composition - General Case")Definition 2.17 Composition - General Case 
 
 Let $\mathbf{S} = (M_{0},M_{1},\ldots,M_{\alpha})$ be a shape tuple, and let $B = (N_{0},N_{1},\ldots,N_{\beta}):(r_{0},r_{1},\ldots,r_{\beta})$ be a layout, let $B_{k} = (N_{k}):(r_{k})$ for $0 \leq k \leq \beta$. Then we say that the pair $\{\mathbf{S},B\}$ is *admissible for composition* if:
 
@@ -1105,7 +1105,7 @@ $$\begin{array}{r}
 
 where each $A \circ B_{k}$ is defined as in Definition 2.13.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Theorem-2-18-Composition-General-Case "Theorem 2.18 Composition - General Case"){.headerlink}Theorem 2.18 Composition - General Case {#Theorem-2-18-Composition-General-Case style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Theorem-2-18-Composition-General-Case "Theorem 2.18 Composition - General Case")Theorem 2.18 Composition - General Case 
 
 In the situation of Definition 2.17, we have that $f_{A \circ B} = {\hat{f}}_{A} \circ f_{B}$.
 
@@ -1199,7 +1199,7 @@ Going back to the discussion why the second condition for admission for composit
 
 Because the critical property $\text{size}(A \circ B) = \text{size}(B)$ will not hold, we will have two completely different isomorphisms for the layout $A \circ B$ and the layout $B$, respectively.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-2-19-Concatenation-of-Layouts "Lemma 2.19 Concatenation of Layouts"){.headerlink}Lemma 2.19 Concatenation of Layouts {#Lemma-2-19-Concatenation-of-Layouts style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-2-19-Concatenation-of-Layouts "Lemma 2.19 Concatenation of Layouts")Lemma 2.19 Concatenation of Layouts 
 
 Let $C = (C_{0},C_{1},\ldots,C_{\gamma})$ be a *concatenated* layout. Let
 
@@ -1287,7 +1287,7 @@ x & {\mapsto\left( x_{0},x_{1},\ldots,x_{\gamma} \right)}
 
 This concludes the proof. 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-21-CUTLASS-Admission-for-Composition-Restricted-Case "Definition 2.21 CUTLASS Admission for Composition - Restricted Case"){.headerlink}Definition 2.21 CUTLASS Admission for Composition - Restricted Case {#Definition-2-21-CUTLASS-Admission-for-Composition-Restricted-Case style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-21-CUTLASS-Admission-for-Composition-Restricted-Case "Definition 2.21 CUTLASS Admission for Composition - Restricted Case")Definition 2.21 CUTLASS Admission for Composition - Restricted Case 
 
 The CUTLASS admission for composition in the restricted case is more restrictive.
 
@@ -1386,7 +1386,7 @@ More specifically, in the [CUTLASS composition layout algebra implementation](ht
 
 The reason why CUTLASS enforces this is because of the logical division operation. Without this restriction, the logical division operation will not be defined in some cases.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Composition "By-Mode Composition"){.headerlink}By-Mode Composition {#By-Mode-Composition style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Composition "By-Mode Composition")By-Mode Composition 
 
 In some cases, we would like to perform composition for each mode of the layout separately.
 
@@ -1402,17 +1402,17 @@ $$\begin{array}{r}
 {A \circ B:=\left( A_{0} \circ B_{0},A_{1} \circ B_{1},\ldots,A_{\alpha} \circ B_{\alpha} \right)}
 \end{array}$$
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Non-Integral-Layout-Composition "Non-Integral Layout Composition"){.headerlink}Non-Integral Layout Composition {#Non-Integral-Layout-Composition style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Non-Integral-Layout-Composition "Non-Integral Layout Composition")Non-Integral Layout Composition 
 
 Similar to the non-integral layout complementation, the non-integral layout composition can be derived by coalescing the the layout so that the layout becomes integral. All the properties of the integral layout composition derived above can then be used.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Composition "Implication of Composition"){.headerlink}Implication of Composition {#Implication-of-Composition style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Composition "Implication of Composition")Implication of Composition 
 
 The composition operation is usually used for selecting a sublayout from a layout. The sublayout can be strided even for each mode if the by-mode composition is performed.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Division "Logical Division"){.headerlink}Logical Division {#Logical-Division style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Division "Logical Division")Logical Division 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-22-Logical-Division "Definition 2.22 Logical Division"){.headerlink}Definition 2.22 Logical Division {#Definition-2-22-Logical-Division style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-2-22-Logical-Division "Definition 2.22 Logical Division")Definition 2.22 Logical Division 
 
 Let $A = \mathbf{S}:\mathbf{D}$ and $B$ be layouts, and let $M$ be the size of $A$. Suppose that the pairs $\{ B,M\}$ and $\{\mathbf{S},B\}$ are admissible (for complementation and composition, respectively). Then we define the *logical division* $A/B$ to be the layout
 
@@ -1424,7 +1424,7 @@ Note that here the conditions of admission for composition follows Definition 2.
 
 Implicitly Lemma 2.23 is used in Definition 2.22.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-2-23-Logical-Division-Implication "Lemma 2.23 Logical Division Implication"){.headerlink}Lemma 2.23 Logical Division Implication {#Lemma-2-23-Logical-Division-Implication style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-2-23-Logical-Division-Implication "Lemma 2.23 Logical Division Implication")Lemma 2.23 Logical Division Implication 
 
 Suppose $A = \mathbf{S}:\mathbf{D}$, $M = \text{size}(A)$, and $B$ are as in Definition 2.22. Then $\{\mathbf{S},\left( B,\text{complement}(B,M) \right)\}$ is admissible for composition.
 
@@ -1516,7 +1516,7 @@ This concludes the proof.
 
 Note that in Definition 2.22, if the conditions of admission for composition follows Definition 2.12, our proof above will not be valid. That's why CUTLASS enforces the conditions of admission for composition follows Definition 2.21.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Logical-Division "By-Mode Logical Division"){.headerlink}By-Mode Logical Division {#By-Mode-Logical-Division style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Logical-Division "By-Mode Logical Division")By-Mode Logical Division 
 
 In some cases, we would like to perform logical division for each mode of the layout separately.
 
@@ -1536,7 +1536,7 @@ $$\begin{matrix}
  & {= \left( \left( A_{0} \circ B_{0},A_{0} \circ \text{complement}(B_{0},M) \right),\left( A_{1} \circ B_{1},A_{1} \circ \text{complement}(B_{1},M) \right),\ldots,\left( A_{\beta} \circ B_{\beta},A_{\beta} \circ \text{complement}(B_{\beta},M) \right),A_{\beta + 1},\ldots,A_{\alpha} \right)}
 \end{matrix}$$
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Division-Variants "Logical Division Variants"){.headerlink}Logical Division Variants {#Logical-Division-Variants style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Division-Variants "Logical Division Variants")Logical Division Variants 
 
 In by-mode logical division, it is inconvenient to select a multi-dimensional tile. Given logical division $A/B$,
 
@@ -1592,7 +1592,7 @@ flat_divide    : (TileM, TileN, RestM, RestN, L, ...)</code></pre></td>
 </div></figcaption>
 </figure>
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Logical-Division "Implication of Logical Division"){.headerlink}Implication of Logical Division {#Implication-of-Logical-Division style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Logical-Division "Implication of Logical Division")Implication of Logical Division 
 
 Because we have previously proved that $\left( B,\text{complement}(B,M) \right)$ is a layout that is a bijection $\lbrack 0,M) \cong \lbrack 0,M)$, the logical division $A/B:=A \circ \left( B,\text{complement}(B,M) \right)$, where $M$ is the size of $A$, is a layout that has the same domain as $A$ and consequently also the same codomain as $A$. This means that the way the original layout $A$ maps from the coordinates $\lbrack 0,M)$ to the integers is scrambled or permutated to a new layout, i.e., the logical division $A/B$.
 
@@ -1607,9 +1607,9 @@ $A \circ B$ is the layout that selects a sublayout, i.e., a tile, from $A$ based
 
 Logical division informs us how to extract a tile using the tiler $B$ from a layout $A$, and how to repeat the tile to fill the domain and codomain of $A$, or how to select a tile from the consequent repeated layout using indexing.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Product "Logical Product"){.headerlink}Logical Product {#Logical-Product style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Product "Logical Product")Logical Product 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-4-1-Logical-Product "Definition 4.1 Logical Product"){.headerlink}Definition 4.1 Logical Product {#Definition-4-1-Logical-Product style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-4-1-Logical-Product "Definition 4.1 Logical Product")Definition 4.1 Logical Product 
 
 Given a tiler and a layout, we could compute how the repeat layout that repeats the tiler to fill the domain and codomain of the layout using logical division. Similarly, given a tiler and a repeat layout, we could compute the resulting layout that is a tile of the repeat layout using logical product.
 
@@ -1623,7 +1623,7 @@ The complementation of a layout $A$ finds a complement layout $\text{complement}
 
 Because $\text{complement}(A,M) \circ B$ is a sublayout of $\text{complement}(A,M)$, the layout concatenation $\left( A,\text{complement}(A,M) \circ B \right)$ remains a valid layout.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Logical-Product "By-Mode Logical Product"){.headerlink}By-Mode Logical Product {#By-Mode-Logical-Product style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#By-Mode-Logical-Product "By-Mode Logical Product")By-Mode Logical Product 
 
 In some cases, we would like to perform logical division for each mode of the layout separately. For example, if we would like to tile a 2D layout with a 2D tiler, we would like to perform logical product for each mode of the layout separately.
 
@@ -1635,7 +1635,7 @@ $$\begin{matrix}
  & {= \left( \left( A_{0},\text{complement}(A_{0},M) \circ B_{0} \right),\left( A_{1},\text{complement}(A_{1},M) \circ B_{1} \right),\ldots,\left( A_{\alpha},\text{complement}(A_{\alpha},M) \circ B_{\alpha} \right) \right)}
 \end{matrix}$$
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Product-Variants "Logical Product Variants"){.headerlink}Logical Product Variants {#Logical-Product-Variants style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Logical-Product-Variants "Logical Product Variants")Logical Product Variants 
 
 Similar to logical division, there are also variants of logical product, including logical product, zipped product, tiled product, and flat product, for the convenience of tile selection and iteration. Assuming the tiler is a tuple of two layouts, the logical product variants are defined as follows:
 
@@ -1674,25 +1674,25 @@ flat_product    : (M, N, TileM, TileN, L, ...)</code></pre></td>
 </div></figcaption>
 </figure>
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Logical-Product "Implication of Logical Product"){.headerlink}Implication of Logical Product {#Implication-of-Logical-Product style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Implication-of-Logical-Product "Implication of Logical Product")Implication of Logical Product 
 
 Similar to logical division, the logical product $A \times B$ informs the us what the layout is after repeating the original layout using the tiler.
 
-## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Permutation-Expressible-As-Layout-Functions "Permutation Expressible As Layout Functions"){.headerlink}Permutation Expressible As Layout Functions {#Permutation-Expressible-As-Layout-Functions style="scroll-margin: 1em;"}
+## [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Permutation-Expressible-As-Layout-Functions "Permutation Expressible As Layout Functions")Permutation Expressible As Layout Functions 
 
 This section explains how to retrieve all permutations that are expressible as layout functions in a structured way. This is important because some permutation algebra used in CUTLASS and CuTe, such as swizzle, does not seem to be expressed as layout function. The basic language of [category theory](https://en.wikipedia.org/wiki/Category_theory){target="_blank" rel="noopener"} is used to describe the process.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-1-Ordered-Factorization "Definition 3.1 Ordered Factorization"){.headerlink}Definition 3.1 Ordered Factorization {#Definition-3-1-Ordered-Factorization style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-1-Ordered-Factorization "Definition 3.1 Ordered Factorization")Definition 3.1 Ordered Factorization 
 
 We define the set $\text{ob}(\textbf{Fact})$ of *ordered factorizations* to consists of all expressions $\lbrack p_{1}\ldots p_{k}\rbrack$ where $k \geq 0$ and the $p_{i}$ are primes (not necessarily distinct). The case $k = 0$ corresponds to the empty factorization, which we denote as $\lbrack\ \rbrack$.
 
 For example, the set $\text{ob}(\textbf{Fact})$ includes expressions such as $\lbrack\ \rbrack$, $\lbrack 2\rbrack$, $\lbrack 3\rbrack$, $\lbrack 22\rbrack$, $\lbrack 23\rbrack$, $\lbrack 32\rbrack$, $\lbrack 232\rbrack$, etc.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Notation-3-3 "Notation 3.3"){.headerlink}Notation 3.3 {#Notation-3-3 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Notation-3-3 "Notation 3.3")Notation 3.3 
 
 Let $\underset{―}{k}$ denote the set $\{ 1,2,\ldots,k\}$ consisting of $k$ elements. (If $k = 0$, then $\underset{―}{0} = \varnothing$ is the empty set.)
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-4-Category-of-Ordered-Factorizations "Definition 3.4 Category of Ordered Factorizations"){.headerlink}Definition 3.4 Category of Ordered Factorizations {#Definition-3-4-Category-of-Ordered-Factorizations style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-4-Category-of-Ordered-Factorizations "Definition 3.4 Category of Ordered Factorizations")Definition 3.4 Category of Ordered Factorizations 
 
 We define the category $\textbf{Fact}$ of ordered factorizations as follows:
 
@@ -1745,7 +1745,7 @@ $$\begin{array}{r}
 
 Therefore, $\text{id}_{\underset{―}{n}}$ is the identity morphism for $\underset{―}{n}$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Notation-3-5 "Notation 3.5"){.headerlink}Notation 3.5 {#Notation-3-5 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Notation-3-5 "Notation 3.5")Notation 3.5 
 
 Let $\Sigma_{k}$ denote the [symmetric group](https://en.wikipedia.org/wiki/Symmetric_group){target="_blank" rel="noopener"} on $k$ letters. Given an element $\varphi \in \Sigma_{k}$, we also denote the associated automorphism of $\underset{―}{k}$ by $\varphi$.
 
@@ -1757,7 +1757,7 @@ Suppose $E = \lbrack 222\rbrack$. Then every permutation $\varphi \in \Sigma_{3}
 
 Suppose $E = \lbrack 232\rbrack$. Then the transposition $\sigma = (13) \in \Sigma_{3}$ defines an automorphism $E^{\sigma} = E\overset{}{\rightarrow}E$ in $\textbf{Fact}$. On the other hand, the transposition $\tau = (12) \in \Sigma_{3}$ defines a morphism $E^{\tau} = \lbrack 322\rbrack\overset{}{\rightarrow}E = \lbrack 232\rbrack$ in $\textbf{Fact}$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-7 "Remark 3.7"){.headerlink}Remark 3.7 {#Remark-3-7 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-7 "Remark 3.7")Remark 3.7 
 
 Let $\textbf{FinSet}$ denote the category of finite sets (or rather a skeleton, with objects given by the sets $\underset{―}{n}$ for $n \geq 0$). Given an object $\underset{―}{k} \in \textbf{FinSet}$, let $\textbf{FinSet}^{/\underset{―}{k}}$ denote the [overcategory](https://en.wikipedia.org/wiki/Overcategory){target="_blank" rel="noopener"}, whose objects are morphisms $\lbrack\alpha:\underset{―}{n} \rightarrow \underset{―}{k}\rbrack$ and whose morphisms are commuting triangles. Recall that this category has a [final object](https://en.wikipedia.org/wiki/Initial_and_terminal_objects){target="_blank" rel="noopener"} given by the identity morphism $\lbrack\text{id}_{\underset{―}{k}}\rbrack$.
 
@@ -1788,7 +1788,7 @@ In the category $\textbf{FinSet}^{/\underset{―}{k}}$, we have $X = \lbrack\alp
 
 In the category $\textbf{Fact}$, by the functor $F_{E}$, we have $F_{E}(X) = E^{\alpha} = \lbrack p_{\alpha(1)}\ldots p_{\alpha(n)}\rbrack$, $F_{E}(Y) = E^{\gamma} = \lbrack p_{\gamma(1)}\ldots p_{\gamma(m)}\rbrack$, $F_{E}(Z) = E = \lbrack p_{1}\ldots p_{k}\rbrack$, and the morphisms are $F_{E}(f) = \alpha_{E}:E^{\alpha}\overset{}{\rightarrow}E^{\gamma}$, $F_{E}(g) = \gamma_{E}:E^{\gamma}\overset{}{\rightarrow}E$, and $F_{E}(g) \circ F_{E}(f) = \alpha_{E}:E^{\alpha}\overset{}{\rightarrow}E$.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-8 "Remark 3.8"){.headerlink}Remark 3.8 {#Remark-3-8 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-8 "Remark 3.8")Remark 3.8 
 
 In fact, we can identify $\textbf{Fact}$ itself as a certain overcategory (or rather, a full [subcategory](https://en.wikipedia.org/wiki/Subcategory){target="_blank" rel="noopener"} thereof). Namely, let $\mathcal{P}$ denote the the infinite set of primes $\{ 2,3,5\ldots\}$, let $\textbf{Set}$ be the category of sets, and let $\textbf{FinSet}^{/\mathcal{P}}$ be the full subcategory of $\textbf{Set}^{/\mathcal{P}}$ on those morphisms $X\overset{}{\rightarrow}\mathcal{P}$ where $X$ is a finite set. Then we have an equivalence of categories
 
@@ -1824,7 +1824,7 @@ $$\begin{array}{r}
 {\textbf{FinSet}^{/\underset{―}{k}} \rightarrow \textbf{FinSet}^{/\mathcal{P}}}
 \end{array}$$
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-9 "Definition 3.9"){.headerlink}Definition 3.9 {#Definition-3-9 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-9 "Definition 3.9")Definition 3.9 
 
 Suppose $E = \lbrack p_{1}\ldots p_{k}\rbrack$ and $\alpha:\underset{―}{n} \rightarrow \underset{―}{k}$. We define a layout $L_{(E,\alpha)}$ as follows:
 
@@ -1841,7 +1841,7 @@ Suppose $E = \lbrack 222\rbrack$ and $\varphi = (231) \in \Sigma_{3}$, so $\varp
 
 We could now see why $p_{i}$ is prime number. It's used for constructing the stride tuple of any kind for the layout, because any natural number can be uniquely factored into a product of prime numbers.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-11 "Remark 3.11"){.headerlink}Remark 3.11 {#Remark-3-11 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-11 "Remark 3.11")Remark 3.11 
 
 Let $E = \lbrack p_{1}\ldots p_{k}\rbrack$ and $\alpha:\underset{―}{n} \rightarrow \underset{―}{k}$. Let $N = p_{1} \cdot p_{2} \cdot \ldots \cdot p_{k}$ and $N^{\alpha} = p_{\alpha(1)} \cdot p_{\alpha(2)} \cdot \ldots \cdot p_{\alpha(n)}$. In what follows, consider the canonical isomorphisms
 
@@ -1960,7 +1960,7 @@ Therefore, we have set up the basis vector mapping for the multilinear function 
 
 This concludes the proof. 
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-3-12 "Lemma 3.12"){.headerlink}Lemma 3.12 {#Lemma-3-12 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Lemma-3-12 "Lemma 3.12")Lemma 3.12 
 
 Elaborating on Remark 3.11, we have the following lemma, which indicates that composition in the category $\textbf{Fact}$ is compatible with the composition of layout functions.
 
@@ -2064,7 +2064,7 @@ When $\beta:\underset{―}{m} \rightarrow \underset{―}{n}$ is not injective, w
 
 So Lemma 3.12 actually proves Theorem 2.18 for layouts that has any *arbitrary strides* (not yet any arbitrary shapes) of the second layout that satisfies Definition 2.17.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-14 "Definition 3.14"){.headerlink}Definition 3.14 {#Definition-3-14 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Definition-3-14 "Definition 3.14")Definition 3.14 
 
 We now define a "realization" functor from the category $\textbf{Fact}$ to the category $\textbf{FinSet}$ that sends morphisms of ordered factorizations to their associated layout functions.
 
@@ -2077,7 +2077,7 @@ By Lemma 3.12, $R:\textbf{Fact} \rightarrow \textbf{FinSet}$ does indeed define 
 
 We note that, as mentioned previously, $R$ does not contain every possible function expressible as a layout function in its image. However, it does contain every automorphism of $\lbrack 0,N)\overset{\cong}{\rightarrow}\lbrack 0,N)$ expressible as a layout function in its image.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-3-15 "Proposition 3.15"){.headerlink}Proposition 3.15 {#Proposition-3-15 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Proposition-3-15 "Proposition 3.15")Proposition 3.15 
 
 Let $N > 0$ be a positive integer and let $f:\lbrack 0,N) \rightarrow \lbrack 0,N)$ be an automorphism such that there exists a layout $L$ of size $N$ with $f = f_{L}$. Then $f_{L}$ is in the image of the realization functor $R$.
 
@@ -2101,7 +2101,7 @@ is a morphism in $\textbf{Fact}$ that $R(\psi_{E}) = f_{L}$.
 
 This concludes the proof.
 
-### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-16 "Remark 3.16"){.headerlink}Remark 3.16 {#Remark-3-16 style="scroll-margin: 1em;"}
+### [](https://leimao.github.io/article/CuTe-Layout-Algebra/#Remark-3-16 "Remark 3.16")Remark 3.16 
 
 One way to interpret Proposition 3.15 is that if we take the maximal subgroupoid $\textbf{Fact}^{\simeq}$ inside $\textbf{Fact}$, i.e., the subcategory of all invertible morphisms, then
 
