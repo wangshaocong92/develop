@@ -52,6 +52,12 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 人们可以将这个同构想象为一维坐标和多维坐标之间的映射。
 
+**注释：**
+此处可以理解为：
+\[
+(M_{0}, M_{1}, \dots, M_{\alpha}: 1, M_{0}, M_{0}M_{1}, \dots, M_{0}M_{1}\cdots M_{\alpha})
+\]
+
 **定义 2.3: 布局函数**
 
 给定一个布局 \(L\)，其布局函数是函数 \(f_{L}:[0,M)\rightarrow\mathbb{N}\)，定义为复合
@@ -141,16 +147,28 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 对于任何 \(x_{i}\in[0,N_{i})\) 和 \(x_{i+1}\in[0,N_{i+1})\)，我们有 \(x^{\prime}=x_{i}+x_{i+1}\cdot N_{i}\)，其中 \(x^{\prime}\in[0,N_{i}N_{i+1})\)。
 
-\[f_{A^{\prime}}(x^{\prime}) =f_{A}(x^{\prime})\] \[=x_{i}d_{i}+x_{i+1}d_{i+1}\] \[=f_{L_{i}}(x_{i})+f_{L_{i+1}}(x_{i+1})\]
+$$\begin{aligned}
+f_{A^{\prime}}(x^{\prime}) &= f_{A}(x^{\prime}) \\
+&= x_{i} d_{i} + x_{i + 1} d_{i + 1} \\
+&= f_{L_{i}}(x_{i}) + f_{L_{i + 1}}(x_{i + 1}) \\
+\end{aligned}$$
 
 给定布局 \(L\) 的任何坐标 \(x\mapsto(x_{0},x_{1},...,x_{i-1},x_{i},x_{i+1},x_{i+2},...,x_{\alpha})\)，将 \(A\) 合并为 \(A^{\prime}\) 后，布局 \(L^{\prime}\)（即合并 \(A\) 为 \(A^{\prime}\) 后的布局）的坐标为 \(x\mapsto(x_{0},x_{1},...,x_{i-1},x^{\prime},x_{i+2},...,x_{\alpha})\)。
 
 这很容易验证，因为坐标同构。
 
-\(x\ =\ x_{0}+x_{1}\cdot N_{0}+x_{2}\cdot N_{0}N_{1}+...+x_{i-1}\cdot N_{0}N_{ 1}...N_{i-2}+x_{i}\cdot N_{0}N_{1}...N_{i-1}+x_{i+1}\cdot N_{0}N_{1}...N_{i-1}N_{ i}+x_{i+2}\cdot N_{0}N_{1}+...+x_{i-1}\cdot N_{0}N_{1}...N_{i-2}+(x_{i}+x_{i+1} \cdot N_{i})\cdot N_{0}N_{1}...N_{i-1}+x_{i+2}\cdot N_{0}N_{1}+...+x_{i-1}\cdot N _{0}N_{1}...N_{i-2}+x^{\prime}\cdot N_{0}N_{1}...N_{i-1}+x_{i+2}\cdot N_{0}N_{1}\)。那么我们有
-
-\[f_{L^{\prime}}(x) =f_{L_{0}}(x_{0})+f_{L_{1}}(x_{1})+...+f_{L_{i-1}}(x_{i-1})+f_{A^{ \prime}}(x^{\prime})+f_{L_{i+2}}(x_{i+2})+...+f_{L_{\alpha}}(x_{\alpha})\] \[=f_{L_{0}}(x_{0})+f_{L_{1}}(x_{1})+...+f_{L_{i-1}}(x_{i-1})+f_{L_{i }}(x_{i})+f_{L_{i+1}}(x_{i+1})+f_{L_{i+2}}(x_{i+2})+...+f_{L_{\alpha}}(x_{\alpha})\] \[=f_{L}(x)\]
-
+$$\begin{aligned}
+x &= x_{0} + x_{1} \cdot N_0 + x_{2} \cdot N_0 N_1 + \ldots + x_{i - 1} \cdot N_0 N_1 \ldots N_{i - 2} + x_{i} \cdot N_0 N_1 \ldots N_{i - 1} + x_{i + 1} \cdot N_0 N_1 \ldots N_{i - 1} N_i + x_{i + 2} \cdot N_0 N_1 \ldots N_{i - 1} N_i N_{i + 1} + \ldots + x_{\alpha} \cdot N_0 N_1 \ldots N_{\alpha - 1} \\
+&= x_{0} + x_{1} \cdot N_0 + x_{2} \cdot N_0 N_1 + \ldots + x_{i - 1} \cdot N_0 N_1 \ldots N_{i - 2} + (x_{i} + x_{i + 1} \cdot N_i) \cdot N_0 N_1 \ldots N_{i - 1} + x_{i + 2} \cdot N_0 N_1 \ldots N_{i - 1} N_i N_{i + 1} + \ldots + x_{\alpha} \cdot N_0 N_1 \ldots N_{\alpha - 1} \\
+&= x_{0} + x_{1} \cdot N_0 + x_{2} \cdot N_0 N_1 + \ldots + x_{i - 1} \cdot N_0 N_1 \ldots N_{i - 2} + x^{\prime} \cdot N_0 N_1 \ldots N_{i - 1} + x_{i + 2} \cdot N_0 N_1 \ldots N_{i - 1} N_i N_{i + 1} + \ldots + x_{\alpha} \cdot N_0 N_1 \ldots N_{\alpha - 1} \\
+\end{aligned}$$
+那么我们有
+$$\begin{aligned}
+f_{L^{\prime}}(x)
+&= f_{L_{0}}(x_{0}) + f_{L_{1}}(x_{1}) + \ldots + f_{L_{i - 1}}(x_{i - 1}) + f_{A^{\prime}}(x^{\prime}) + f_{L_{i + 2}}(x_{i + 2}) + \ldots + f_{L_{\alpha}}(x_{\alpha}) \\
+&= f_{L_{0}}(x_{0}) + f_{L_{1}}(x_{1}) + \ldots + f_{L_{i - 1}}(x_{i - 1}) + f_{L_{i}}(x_{i}) + f_{L_{i + 1}}(x_{i + 1}) + f_{L_{i + 2}}(x_{i + 2}) + \ldots + f_{L_{\alpha}}(x_{\alpha}) \\
+&= f_{L}(x)
+\end{aligned}$$
 因此，将 \(A\) 合并为 \(A^{\prime}\) 后，布局函数保持不变。
 
 证明完毕。
@@ -213,7 +231,7 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 更一般地，排序布局就像是列主序布局的“泛化”。
 
-定义 2.5: 补集的可接纳性
+**定义 2.5: 补集的可接纳性**
 
 令 \(A = (N_0, N_1, ..., N_\alpha) : (d_0, d_1, ..., d_\alpha)\) 为一个布局，\(M\) 为一个正整数。如果 \(A\) 没有排序，则将其替换为其排序版本。如果满足以下条件，我们说对 \(\{A, M\}\) 是可接纳的（对于补集，或简称为可接纳）：
 
@@ -225,7 +243,7 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 - 对于所有 \(1 \leq i \leq \alpha\)，\(N_{i-1} \cdot d_{i-1} \leq d_i\) 且 \(d_{i-1} \leq d_i\)。
 - \(N_\alpha \cdot d_\alpha \leq M\) 且 \(d_\alpha \leq M\)。
 
-定义 2.6: 补集
+**定义 2.6: 补集**
 
 令 \(A = (N_0, N_1, ..., N_\alpha) : (d_0, d_1, ..., d_\alpha)\) 为一个布局，\(M\) 为一个正整数。如果 \(\{A, M\}\) 对于补集是可接纳的，那么如果 \(A\) 没有排序，则将其替换为其排序版本。\(\{A, M\}\) 的补集定义为布局
 
@@ -257,7 +275,11 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 那么我们有
 
-\[f_{B}(x+1)\ \ =x_{0}+1+x_{1}\cdot N_{0}d_{0}+x_{2}\cdot N_{1}d_{1}+...+x_{ \alpha}\cdot N_{\alpha-1}d_{\alpha-1}+x_{\alpha+1}\cdot N_{\alpha}d_{\alpha}\] \[\qquad\qquad\qquad\qquad\qquad\qquad=f_{B}(x)+1\] \[\qquad\qquad\qquad\qquad\qquad>f_{B}(x)\]
+$$\begin{aligned}
+f_{B}(x + 1) &= x_0 + 1 + x_1 \cdot N_0 d_0 + x_2 \cdot N_1 d_1 + \ldots + x_{\alpha} \cdot N_{\alpha - 1} d_{\alpha - 1} + x_{\alpha + 1} \cdot N_{\alpha} d_{\alpha} \\
+&= f_{B}(x) + 1 \\
+&> f_{B}(x)
+\end{aligned}$$
 
 在一个更复杂的情况下，其中 \(x_{0}=d_{0}-1\) 且 \(x_{1}<\frac{d_{1}}{N_{0}d_{0}}-1\)，我们有
 
@@ -265,7 +287,13 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 那么我们有
 
-\[f_{B}(x+1)\ \ =0+(x_{1}+1)\cdot N_{0}d_{0}+x_{2}\cdot N_{1}d_{1}+...+x_{ \alpha}\cdot N_{\alpha-1}d_{\alpha-1}+x_{\alpha+1}\cdot N_{\alpha}d_{\alpha}\] \[\qquad\qquad\qquad\qquad\qquad=f_{B}(x)-x_{0}+N_{0}d_{0}\] \[\qquad\qquad\qquad\qquad\qquad=f_{B}(x)-(d_{0}-1)+N_{0}d_{0}\] \[\qquad\qquad\qquad\qquad\qquad=f_{B}(x)+1+(N_{0}-1)d_{0}\] \[\qquad\qquad\qquad\qquad\qquad>f_{B}(x)\]
+$$\begin{aligned}
+f_{B}(x + 1) &= 0 + (x_1 + 1) \cdot N_0 d_0 + x_2 \cdot N_1 d_1 + \ldots + x_{\alpha} \cdot N_{\alpha - 1} d_{\alpha - 1} + x_{\alpha + 1} \cdot N_{\alpha} d_{\alpha} \\
+&= f_{B}(x) - x_0 + N_0 d_0 \\
+&= f_{B}(x) - (d_0 - 1) + N_0 d_0 \\
+&= f_{B}(x) + 1 + (N_0 - 1) d_0 \\
+&> f_{B}(x)
+\end{aligned}$$
 
 因为 \(N_{0}\geq 1\)，我们有 \((N_{0}-1)d_{0}\geq 0\)，所以
 
@@ -277,17 +305,14 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 那么我们有
 
-\(f_{B}(x+1) =0+0\cdot N_{0}d_{0}+...+0\cdot N_{k-1}d_{k-1}+(x_{k+1}+1)\cdot N_{k}d_ {k}+...+x_{\alpha}\cdot N_{\alpha-1}d_{\alpha-1}+x_{\alpha+1}\cdot N_{\alpha}d _{\alpha}\)
-
-\[=f_{B}(x)-x_{0}-\left(\sum_{i=1}^{k}x_{i}\cdot N_{i-1}d_{i-1}\right)+N_{k}d_{k}\]
-
-\[=f_{B}(x)-(d_{0}-1)-\left(\sum_{i=1}^{k}\left(\frac{d_{i}}{N_{i-1}d_{i-1}}-1 \right)\cdot N_{i-1}d_{i-1}\right)+N_{k}d_{k}\]
-
-\[=f_{B}(x)-(d_{0}-1)-\left(\sum_{i=1}^{k}\left(d_{i}-N_{i-1}d_{i-1}\right)\right )+N_{k}d_{k}\]
-
-\[=f_{B}(x)-(d_{0}-1)+\sum_{i=1}^{k}N_{i-1}d_{i-1}-\sum_{i=1}^{k}d_{i}+N_{k}d_{k}\]
-
-\[=f_{B}(x)+\sum_{i=0}^{k}\left(N_{i}-1\right)d_{i}+1\]
+$$\begin{aligned}
+f_{B}(x + 1) &= 0 + 0 \cdot N_0 d_0 + \ldots + 0 \cdot N_{k - 1} d_{k - 1} + (x_{k + 1} + 1) \cdot N_k d_k + \ldots + x_{\alpha} \cdot N_{\alpha - 1} d_{\alpha - 1} + x_{\alpha + 1} \cdot N_{\alpha} d_{\alpha} \\
+&= f_{B}(x) - x_0 - \left(\sum_{i = 1}^{k} x_i \cdot N_{i - 1} d_{i - 1}\right) + N_k d_k \\
+&= f_{B}(x) - (d_0 - 1) - \left(\sum_{i = 1}^{k} \left(\frac{d_i}{N_{i - 1} d_{i - 1}} - 1\right) \cdot N_{i - 1} d_{i - 1}\right) + N_k d_k \\
+&= f_{B}(x) - (d_0 - 1) - \left(\sum_{i = 1}^{k} \left(d_i - N_{i - 1} d_{i - 1}\right)\right) + N_k d_k \\
+&= f_{B}(x) - (d_0 - 1) + \sum_{i = 1}^{k} N_{i - 1} d_{i - 1} - \sum_{i = 1}^{k} d_i + N_k d_k \\
+&=  f_{B}(x) + \sum_{i = 0}^{k} \left(N_{i} - 1\right) d_{i} + 1 \\
+\end{aligned}$$
 
 因为对于每个 \(i\)，\(N_{i}\geq 1\)，所以对于每个 \(i\)，\((N_{i}-1)\,d_{i}\geq 0\)，因此
 
@@ -331,7 +356,13 @@ CuTe布局代数对于理解和应用CUTLASS进行加速计算极其重要。尽
 
 其中 \(\beta=2\alpha+1\)，且 \(f_{C^{\prime}}\) 达到的最大值计算如下：
 
-\[f_{C^{\prime}}(M-1) = f_{C^{\prime}}(r_{0}-1,r_{1}-1,r_{2}-1,...,r_{\beta-1}-1,r_{\beta }-1)\] \[= (r_{0}-1)+(r_{1}-1)\cdot r_{0}+(r_{2}-1)\cdot r_{0}r_{1}+...+(r_{ \beta-1}-1)\cdot r_{0}r_{1}...r_{\beta-2}+(r_{\beta}-1)\cdot r_{0}r_{1}...\] \[= r_{0}-1+r_{0}r_{1}-r_{0}+r_{0}r_{1}r_{2}-r_{0}r_{1}+...+r_{0}r_{1 }...r_{\beta-1}-r_{0}r_{1}...r_{\beta-2}+r_{0}r_{1}...r_{\beta}-r_{0}r_{1}...\] \[= r_{0}r_{1}...r_{\beta}-1\] \[= M-1\]
+$$\begin{aligned}
+f_{C^{\prime}}(M - 1) &= f_{C^{\prime}}(r_0 - 1, r_1 - 1, r_2 - 1, \ldots, r_{\beta - 1} - 1, r_{\beta} - 1) \\
+&= (r_0 - 1) + (r_1 - 1) \cdot r_0 + (r_2 - 1) \cdot r_0 r_1 + \ldots + (r_{\beta - 1} - 1) \cdot r_0 r_1 \ldots r_{\beta - 2} + (r_{\beta} - 1) \cdot r_0 r_1 \ldots r_{\beta - 1} \\
+&= r_0 - 1 + r_0 r_1  - r_0 + r_0 r_1 r_2 - r_0 r_1 + \ldots + r_0 r_1 \ldots r_{\beta - 1} - r_0 r_1 \ldots r_{\beta - 2} + r_0 r_1 \ldots r_{\beta} - r_0 r_1 \ldots r_{\beta - 1} \\
+&= r_0 r_1 \ldots r_{\beta} - 1 \\
+&= M - 1
+\end{aligned}$$
 
 那么在这种情况下，要建立双射性断言，只需证明 \(f_{C^{\prime}}(x)\) 是单射的，即对于任何 \(x,y\in[0,M)\)，如果 \(f_{C^{\prime}}(x)=f_{C^{\prime}}(y)\)，则 \(x=y\)。
 
@@ -422,7 +453,7 @@ $$\begin{matrix}
 (𝑁1 −1)𝑑1 + … + (𝑁𝛼−1)𝑑𝛼\)。
 因为对于每个 \(𝑖∈[0, 𝛼−1]\)，有 \((𝑁0 −1)𝑑0 < 𝑁0𝑑0\) 且 \(𝑁𝑖𝑑𝑖≤𝑑𝑖+1\)，以及 $N_{\alpha}d_{\alpha} \leq M$，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{A}(N_{0}N_{1}\ldots N_{\alpha} - 1)} & {= (N_{0} - 1)d_{0} + (N_{1} - 1)d_{1} + \ldots + (N_{\alpha} - 1)d_{\alpha}} \\
  & {< N_{0}d_{0} + N_{1}d_{1} - d_{1} + N_{2}d_{2} - d_{2} + \ldots + N_{\alpha}d_{\alpha} - d_{\alpha}} \\
  & {\leq d_{1} + N_{1}d_{1} - d_{1} + N_{2}d_{2} - d_{2} + \ldots + N_{\alpha}d_{\alpha} - d_{\alpha}} \\
@@ -432,7 +463,7 @@ $$\begin{matrix}
  & {\leq d_{\alpha} + N_{\alpha}d_{\alpha} - d_{\alpha}} \\
  & {= N_{\alpha}d_{\alpha}} \\
  & {\leq M}
-\end{matrix}$$
+\end{aligned}$$
 
 因此 $f_{A}(N_{0}N_{1}\ldots N_{\alpha} - 1) < {\hat{f}}_{B}(\text{size}(B))$。
 在 $I \cap J = I$ 的情况下，即 $\text{size}(A) \leq \text{size}(B)$。那么我们有
@@ -484,7 +515,7 @@ $f_{A}(x) < {\hat{f}}_{B}(\text{size}(B))$。
 
 根据 \(\operatorname{cosize}\) 的定义，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {\text{cosize}(B)} & {= f_{B}(\text{size}(B) - 1) + 1} \\
  & {= f_{B}\left( d_{0} - 1,\frac{d_{1}}{N_{0}d_{0}} - 1,\ldots,\frac{d_{\alpha}}{N_{\alpha - 1}d_{\alpha - 1}} - 1,\frac{M}{N_{\alpha}d_{\alpha}} - 1 \right) + 1} \\
  & {= (d_{0} - 1) + \left( \frac{d_{1}}{N_{0}d_{0}} - 1 \right) \cdot N_{0}d_{0} + \ldots + \left( \frac{d_{\alpha}}{N_{\alpha - 1}d_{\alpha - 1}} - 1 \right) \cdot N_{\alpha - 1}d_{\alpha - 1} + \left( \frac{M}{N_{\alpha}d_{\alpha}} - 1 \right) \cdot N_{\alpha}d_{\alpha} + 1} \\
@@ -492,14 +523,14 @@ $$\begin{matrix}
  & {= M - \left( \left( N_{0} - 1 \right)d_{0} + \left( N_{1} - 1 \right)d_{1} + \ldots + \left( N_{\alpha} - 1 \right)d_{\alpha} \right)} \\
  & {= M - f_{A}(\text{size}(A) - 1)} \\
  & {= M - \left( \text{cosize}(A) - 1 \right)}
-\end{matrix}$$
+\end{aligned}$$
 
 为了得到不等式 $\text{cosize}(B) \leq \left\lfloor \frac{M}{\text{cosize}(A)} \right\rfloor \cdot \text{cosize}(A)$，我们将上述等式除以 $\text{cosize}(A)$。
 
-$$\begin{matrix}
+$$\begin{aligned}
 \frac{\text{cosize}(B)}{\text{cosize}(A)} & {= \frac{M - \left( \text{cosize}(A) - 1 \right)}{\text{cosize}(A)}} \\
  & {= \frac{M}{\text{cosize}(A)} - 1 + \frac{1}{\text{cosize}(A)}}
-\end{matrix}$$
+\end{aligned}$$
 
 我们需要证明
 
@@ -530,7 +561,7 @@ $$\begin{matrix}
 
 布局的补集找到了一个具有正整数的补集布局，使得当两个布局连接时，例如 \((B,\text{complement}(B,M))\)，新布局是一个双射 \([0,M)\ \cong\ [0,M)\)。这也就是说，如果使用补集布局重复原始布局，新布局仍然是双射。
 
-**复合**
+## 复合
 
 **定义 2.11 左可除性**
 
@@ -545,6 +576,11 @@ $$\begin{matrix}
 3.  对于 \(i<\alpha\) 的情况下的第二个条件，我们额外要求 \(c\) 也整除 \(M_{i}\)。
 
 这里 \(i\) 如果存在则必然是唯一的。我们可以通过反证法证明这一点。
+
+```
+注释：
+从d找到其位于M的第i个维度 
+```
 
 证明
 
@@ -611,13 +647,25 @@ $$\begin{matrix}
 
 要看到这一点，在 \(0\leq i<\alpha\) 的情况下，我们有
 
-\[\hat{M} =M_{0}\cdot M_{1}\cdot...\cdot M_{\alpha-1}\cdot\infty\] \[=M_{0}\cdot M_{1}\cdot...\cdot M_{i-1}\cdot M_{i}\cdot M_{i+1} \cdot...\cdot M_{\alpha-1}\cdot\infty\] \[=\frac{d}{c}\cdot M_{i}\cdot M_{i+1}\cdot...\cdot M_{\alpha-1}\cdot\infty\] \[=d\cdot\frac{M_{i}}{c}\cdot M_{i+1}\cdot...\cdot M_{\alpha-1}\cdot\infty\] \[=d\cdot\hat{M}_{0}^{\prime}\cdot M_{1}^{\prime}\cdot...\cdot M_{ \alpha-i-1}^{\prime}\cdot\infty\] \[=d\cdot\hat{M}^{\prime}\]
+$$\begin{aligned}
+\widehat{M} &= M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1} \cdot \infty \\
+&= M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i - 1} \cdot M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1} \cdot \infty \\
+&= \frac{d}{c} \cdot M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1} \cdot \infty \\
+&= d \cdot \frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1} \cdot \infty \\
+&= d \cdot M_{0}^{\prime} \cdot M_{1}^{\prime} \cdot \ldots \cdot M_{\alpha - i - 1}^{\prime} \cdot \infty \\
+&= d \cdot \widehat{M}^{\prime}
+\end{aligned}$$
 
 其中 \(\hat{M}^{\prime}=M_{0}^{\prime}\cdot M_{1}^{\prime}\cdot...\cdot M_{\alpha-i-1 }^{\prime}\cdot\infty\)，且 \(M_{0}^{\prime}=\frac{M_{i}}{c}>1\)，对于 \(0<j<\alpha-i\)，\(M_{j}^{\prime}=M_{i+j}\)。
 
 在 \(i=\alpha\) 的情况下，我们有
 
-\[\hat{M} =M_{0}\cdot M_{1}\cdot...\cdot M_{\alpha-1}\cdot\infty\] \[=\frac{d}{c}\cdot\infty\] \[=\hat{d}\cdot\infty\] \[=d\cdot\hat{M}^{\prime}\]
+$$\begin{aligned}
+\widehat{M} &= M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1} \cdot \infty \\
+&= \frac{d}{c} \cdot \infty \\
+&= d \cdot \infty \\
+&= d \cdot \widehat{M}^{\prime}
+\end{aligned}$$
 
 其中 \(\hat{M}^{\prime}=\infty\)。
 
@@ -702,7 +750,10 @@ $$\begin{array}{r}
 
 因为 \(B=(N):(r)\)，我们有
 
-\[f_{B}(k) =k\cdot r\] \[=M_{0}\cdot M_{1}\cdot...\cdot M_{i-1}\cdot k\cdot c\]
+$$\begin{aligned}
+f_B(k) &= k \cdot r \\
+&= M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i - 1} \cdot k \cdot c \\
+\end{aligned}$$
 
 其中 \(k\in[0,N-1]\)。
 
@@ -714,7 +765,11 @@ $$\begin{array}{r}
 
 那么我们有
 
-\[\left(\hat{f}_{A}\circ f_{B}\right)(k) =\hat{f}_{A}\left(f_{B}(k)\right)\] \[=\hat{f}_{A}(\delta_{i}\cdot k\cdot c)\] \[=k\cdot c\cdot d_{i}\]
+$$\begin{aligned}
+\left(\widehat{f}_A \circ f_B \right)(k) &= \widehat{f}_A \left(f_B\left(k\right)\right) \\
+&= \widehat{f}_A \left(\delta_{i} \cdot k \cdot c\right) \\
+&= k \cdot c \cdot d_{i} \\
+\end{aligned}$$
 
 根据定义 2.13，我们有
 
@@ -724,11 +779,11 @@ $$\begin{array}{r}
 
 否则，如果 \(N>\frac{M_{i}}{c}\)，即 \(N=\frac{M_{i}}{c}\cdot...\cdot M_{j-1}\cdot c^{\prime}\)。由于扩展布局 \(A\) 的同构，根据定义，我们有
 
-$$\begin{matrix}
-{f_{B}(k)} & {\mapsto\left( f_{B}(k)\quad{mod}\,\, M_{0},\left\lfloor \frac{f_{B}(k)}{M_{0}} \right\rfloor\quad{mod}\,\, M_{1},\left\lfloor \frac{f_{B}(k)}{M_{0} \cdot M_{1}} \right\rfloor\quad{mod}\,\, M_{2},\ldots,\left\lfloor \frac{f_{B}(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i - 1}} \right\rfloor\quad{mod}\,\, M_{i},\ldots,\left\lfloor \frac{f_{B}(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor\quad{mod}\,\, M_{\alpha - 1},\left\lfloor \frac{f_{B}(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right)} \\
- & {= \left( 0,0,\ldots,(k \cdot c)\quad{mod}\,\, M_{i},\left\lfloor \frac{k \cdot c}{M_{i}} \right\rfloor\quad{mod}\,\, M_{i + 1},\ldots,\left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, M_{j},\ldots,\left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor\quad{mod}\,\, M_{\alpha - 1},\left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right)} \\
- & {= \left( 0,0,\ldots,\left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c,\left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1},\ldots,\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, M_{j},\ldots,\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor\quad{mod}\,\, M_{\alpha - 1},\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right)}
-\end{matrix}$$
+$$\begin{aligned}
+f_B(k) &\mapsto \left(f_B(k) \mod M_{0}, \left\lfloor \frac{f_B(k)}{M_{0}} \right\rfloor \mod M_{1}, \left\lfloor \frac{f_B(k)}{M_{0} \cdot M_{1}} \right\rfloor \mod M_{2}, \ldots, \left\lfloor \frac{f_B(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i - 1}} \right\rfloor \mod M_{i}, \ldots, \left\lfloor \frac{f_B(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor \mod M_{\alpha - 1}, \left\lfloor \frac{f_B(k)}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right) \\
+&= \left(0, 0, \ldots, \left(k \cdot c\right) \mod M_{i}, \left\lfloor \frac{k \cdot c}{M_{i}} \right\rfloor \mod M_{i + 1}, \ldots, \left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor \mod M_{j}, \ldots, \left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor \mod M_{\alpha - 1}, \left\lfloor \frac{k \cdot c}{M_{i} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right) \\
+&= \left(0, 0, \ldots, \left( k \mod \frac{M_{i}}{c} \right) \cdot c, \left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor \mod M_{i + 1}, \ldots, \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor \mod M_{j}, \ldots, \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 2}} \right\rfloor \mod M_{\alpha - 1}, \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \right) \\
+\end{aligned}$$
 
 注意这里我们使用了性质：如果 \(c\) 整除 \(M_{i}\)，则 \((k\cdot c)\equiv\left(k\bmod\frac{M_{i}}{c}\right)\cdot c\pmod{M_{i}}\)。
 
@@ -738,30 +793,30 @@ $$\begin{matrix}
 
 当 \(c^{\prime}>1\) 时，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, M_{j}} & {= \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime}}
-\end{matrix}$$
+\end{aligned}$$
 
 因此，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{B}(k)} & {\mapsto\left( 0,0,\ldots,\left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c,\left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1},\ldots,\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime},0,0,\ldots,0 \right)}
-\end{matrix}$$
+\end{aligned}$$
 
 因此，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {\left( {\hat{f}}_{A} \circ f_{B} \right)(k)} & {= {\hat{f}}_{A}\left( f_{B}(k) \right)} \\
  & {= {\hat{f}}_{A}\left( 0,0,\ldots,\left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c,\left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1},\ldots,\left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime},0,0,\ldots,0 \right)} \\
  & {= 0 \cdot d_{0} + 0 \cdot d_{1} + \ldots + \left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c \cdot d_{i} + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1} \right) \cdot d_{i + 1} + \ldots + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime} \right) \cdot d_{j} + 0 \cdot d_{j + 1} + \ldots + 0 \cdot d_{\alpha}} \\
  & {= \left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c \cdot d_{i} + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1} \right) \cdot d_{i + 1} + \ldots + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime} \right) \cdot d_{j}}
-\end{matrix}$$
+\end{aligned}$$
 
 根据定义 2.13，我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{A \circ B}(k)} & {= \left( k\quad{mod}\,\,\frac{M_{i}}{c} \right) \cdot c \cdot d_{i} + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c}} \right\rfloor\quad{mod}\,\, M_{i + 1} \right) \cdot d_{i + 1} + \ldots + \left( \left\lfloor \frac{k}{\frac{M_{i}}{c} \cdot M_{i + 1} \cdot \ldots \cdot M_{j - 1}} \right\rfloor\quad{mod}\,\, c^{\prime} \right) \cdot d_{j}}
-\end{matrix}$$
+\end{aligned}$$
 
 因此，\( f_{A\circ B} = \hat{f}_{A}\circ f_{B} \)。
 
@@ -859,17 +914,30 @@ $$\begin{array}{r}
 
 根据引理 2.19，我们有
 
-\[\hat{f}_{A}\circ f_{B}(x) =\widehat{f}_{A}\left(f_{B}(x)\right)\] \[=\widehat{f}_{A}\left(f_{B_{0}}(x_{0})+f_{B_{1}}(x_{1})+...+f_{B_{ \beta}}(x_{\beta})\right)\]
+$$\begin{aligned}
+\widehat{f}_A \circ f_B(x) &= \widehat{f}_A \left(f_B(x)\right) \\
+&= \widehat{f}_A \left(f_{B_{0}}(x_{0}) + f_{B_{1}}(x_{1}) + \ldots + f_{B_{\beta}}(x_{\beta})\right) \\
+\end{aligned}$$
 
 根据定义 2.17、引理 2.19 和定义 2.13，我们有
 
-\[f_{A\circ B}(x) =f_{A\circ B_{0}}(x_{0})+f_{A\circ B_{1}}(x_{1})+...+f_{A\circ B_{ \beta}}(x_{\beta})\] \[=\widehat{f}_{A}\circ f_{B_{0}}(x_{0})+\hat{f}_{A}\circ f_{B_{1}} (x_{1})+...+\hat{f}_{A}\circ f_{B_{\beta}}(x_{\beta})\] \[=\hat{f}_{A}\left(f_{B_{0}}(x_{0})\right)+\hat{f}_{A}\left(f_{B_{1 }}(x_{1})\right)+...+\hat{f}_{A}\left(f_{B_{\beta}}(x_{\beta})\right)\]
+$$\begin{aligned}
+f_{A \circ B}(x) &= f_{A \circ B_{0}}(x_{0}) + f_{A \circ B_{1}}(x_{1}) + \ldots + f_{A \circ B_{\beta}}(x_{\beta}) \\
+&= \widehat{f}_A \circ f_{B_{0}}(x_{0}) + \widehat{f}_A \circ f_{B_{1}}(x_{1}) + \ldots + \widehat{f}_A \circ f_{B_{\beta}}(x_{\beta}) \\
+&= \widehat{f}_A \left(f_{B_{0}}(x_{0})\right) + \widehat{f}_A \left(f_{B_{1}}(x_{1})\right) + \ldots + \widehat{f}_A \left(f_{B_{\beta}}(x_{\beta})\right) \\
+\end{aligned}$$
 
 通常，我们没有 \(\hat{f}_{A}\left(x_{A,0}+x_{A,1}+...+x_{A,\beta}\right)=\hat{f}_{A}\left(x_{A,0 }\right)+\hat{f}_{A}\left(x_{A,1}\right)+...+\hat{f}_{A}\left(x_{A,\beta}\right)\)，因为布局函数 \(\hat{f}_{A}\) 不是线性的。例如，假设 \(A=(2,3):(1,4)\)，我们有 \(\hat{f}_{A}(1)=1\) 和 \(\hat{f}_{A}(3)=5\)。 \(\hat{f}_{A}(3)=\hat{f}_{A}(1+1+1)\neq\hat{f}_{A}(1)+\hat{f}_{A}(1)+\hat{f}_{A} (1)\)。
 
 然而，在一些特殊情况下，上述等式成立。例如，为简单起见，假设 \(\beta=\alpha\)，如果我们有
 
-\[x_{A,0} \in[0,M_{0})\] \[x_{A,1} \in\{0,1\cdot M_{0},2\cdot M_{0},...,\infty\cdot M_{0}\}\cap[0,M_ {1})\] \[x_{A,2} \in\{0,1\cdot M_{0}\cdot M_{1},2\cdot M_{0}\cdot M_{1},..., \infty\cdot M_{0}\cdot M_{1}\}\cap[0,M_{2})\] \[\vdots\] \[x_{A,\alpha} \in\{0,1\cdot M_{0}\cdot M_{1}\cdot...\cdot M_{\alpha-1},2\cdot M _{0}\cdot M_{1}\cdot...\cdot M_{\alpha-1},...,\infty\cdot M_{0}\cdot M_{1} \cdot...\cdot M_{\alpha-1}\}\cap[0,M_{\alpha})\]
+$$\begin{aligned}
+x_{A, 0} &\in [0, M_{0}) \\
+x_{A, 1} &\in \{0, 1 \cdot M_{0}, 2 \cdot M_{0}, \ldots, \infty \cdot M_{0}\} \cap [0, M_{1}) \\
+x_{A, 2} &\in \{0, 1 \cdot M_{0} \cdot M_{1}, 2 \cdot M_{0} \cdot M_{1}, \ldots, \infty  \cdot M_{0} \cdot M_{1}\} \cap [0, M_{2}) \\
+&\vdots \\
+x_{A, \alpha} &\in \{0, 1 \cdot M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}, 2 \cdot M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}, \ldots, \infty  \cdot M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}\} \cap [0, M_{\alpha}) \\
+\end{aligned}$$
 
 根据定义，
 
@@ -877,13 +945,21 @@ $$\begin{array}{r}
 
 所以，在我们的情况下，我们有
 
-\[\widehat{f}_{A}\left(x_{A,0}+x_{A,1}+...+x_{A,\beta}\right) = \left(\left(x_{A,0}+x_{A,1}+...+x_{A,\beta}\right)\mod M_{0} \right)\cdot d_{0}+\left(\left\lfloor\frac{x_{A,0}+x_{A,1}+...+x_{A,\beta}}{M_{0 }}\right\rfloor\mod M_{0}\right)\] \[= \left(x_{A,0}\mod M_{0}\right)\cdot d_{0}+\left(\left\lfloor\frac{x_ {A,1}}{M_{0}}\right\rfloor\mod M_{1}\right)\cdot d_{1}+...+\] \[= \widehat{f}_{A}\left(x_{A,0}\right)+\widehat{f}_{A}\left(x_{A,1} \right)+...+...\]
+$$\begin{aligned}
+\widehat{f}_A \left(x_{A, 0} + x_{A, 1} + \ldots + x_{A, \beta}\right)
+&= \left( \left( x_{A, 0} + x_{A, 1} + \ldots + x_{A, \beta} \right) \mod M_{0} \right) \cdot d_{0} + \left( \left\lfloor \frac{x_{A, 0} + x_{A, 1} + \ldots + x_{A, \beta}}{M_{0}} \right\rfloor \mod M_{1} \right) \cdot d_{1} + \ldots + \left( \left\lfloor \frac{x_{A, 0} + x_{A, 1} + \ldots + x_{A, \beta}}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \mod M_{\alpha} \right) \cdot d_{\alpha} \\
+&= \left( x_{A, 0} \mod M_{0} \right) \cdot d_{0} + \left( \left\lfloor \frac{x_{A, 1}}{M_{0}} \right\rfloor \mod M_{1} \right) \cdot d_{1} + \ldots + \left( \left\lfloor \frac{x_{A, \beta}}{M_{0} \cdot M_{1} \cdot \ldots \cdot M_{\alpha - 1}} \right\rfloor \mod M_{\alpha} \right) \cdot d_{\alpha} \\
+&= \widehat{f}_A \left(x_{A, 0}\right) + \widehat{f}_A \left(x_{A, 1}\right) + \ldots + \widehat{f}_A \left(x_{A, \beta}\right) \\
+\end{aligned}$$
 
 复合可接纳性的第二个条件的思想，即对 \(\{\mathbf{S},B_{k}\}_{0\leq k\leq\beta}\) 的定义区间互不相交，正是如此。
 
 因为 \(r_{k}=M_{0}\cdot M_{1}\cdot...\cdot M_{i_{k}-1}\cdot c\)，对于 \(x_{k}\in[0,N_{k})\)，我们有
 
-\[f_{B_{k}}(x_{k}) \in [0,1\cdot r,2\cdot r,...,(N_{k}-1)\cdot r]\] \[= [0,M_{0}\cdot M_{1}\cdot...\cdot M_{i_{k}-1}\cdot c,2\cdot M_{0} \cdot M_{1}\cdot...\cdot M_{i_{k}-1}\cdot c,...,(N_{k}-1)\cdot M_{0}\cdot M_{1} \cdot...\cdot M_{i_{k}-1}\cdot c]\]
+$$\begin{aligned}
+f_{B_{k}}(x_{k}) &\in [0, 1 \cdot r, 2 \cdot r, \ldots, (N_{k} - 1) \cdot r] \\
+&= [0, M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i_{k} - 1} \cdot c, 2 \cdot M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i_{k} - 1} \cdot c, \ldots, (N_{k} - 1) \cdot M_{0} \cdot M_{1} \cdot \ldots \cdot M_{i_{k} - 1} \cdot c] \\
+\end{aligned}$$
 
 由于布局 \(A\) 的同构，我们有
 
