@@ -1194,7 +1194,11 @@ CuTe 实现了四种逻辑除法变体，包括逻辑除法、拉链除法、平
 
 根据复合的定义，
 
-\[A/B :=A\circ(B,\text{complement}(B,M))\] \[=(A\circ B,A\circ\text{complement}(B,M))\]
+$$\begin{aligned}
+A / B
+&:= A \circ \left(B, \text{complement}(B, M)\right) \\
+&= \left( A \circ B, A \circ \text{complement}(B, M) \right) \\
+\end{aligned}$$
 
 \(A\circ B\) 是基于布局 \(B\) 从 \(A\) 中选择子布局（即平铺）的布局，而 \(A\circ\text{complement}(B,M)\) 则重复 \(A\circ B\) 布局以填满 \(A\) 的定义域和陪域。
 
@@ -1378,11 +1382,14 @@ $$\begin{array}{r}
 
 所以我们有
 
-\[\max\left(f_{(E,\alpha)}\right) =(p_{\alpha(1)}-1)d_{1}+(p_{\alpha(2)}-1)d_{2}+...+(p_{\alpha(n)} -1)d_{n}\] \[=(p_{\alpha(1)}-1)\prod\limits_{j<\alpha(1)}p_{j}+(p_{\alpha(2)}-1 )\prod\limits_{j<\alpha(2)}p_{j}+...+(p_{\alpha(n)}-1)\prod\limits_{j<\alpha(n)} p_{j}\]
+$$\begin{aligned}
+\max \left( f_{(E, \alpha)} \right) &= (p_{\alpha(1)} - 1) d_{1} + (p_{\alpha(2)} - 1) d_{2} + \ldots + (p_{\alpha(n)} - 1) d_{n} \\
+&= (p_{\alpha(1)} - 1) \prod_{j < \alpha(1)} p_{j} + (p_{\alpha(2)} - 1) \prod_{j < \alpha(2)} p_{j} + \ldots + (p_{\alpha(n)} - 1) \prod_{j < \alpha(n)} p_{j} \\
+\end{aligned}$$
 
 不失一般性，我们假设 \(p_{\alpha(1)}\leq p_{\alpha(2)}\leq...\leq p_{\alpha(n)}\)。那么我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {\max\left( f_{(E,\alpha)} \right)} & {= (p_{\alpha(1)} - 1)\prod\limits_{j < \alpha(1)}p_{j} + (p_{\alpha(2)} - 1)\prod\limits_{j < \alpha(2)}p_{j} + \ldots + (p_{\alpha(n)} - 1)\prod\limits_{j < \alpha(n)}p_{j}} \\
  & {\leq p_{\alpha(1)}\prod\limits_{j < \alpha(1)}p_{j} + (p_{\alpha(2)} - 1)\prod\limits_{j < \alpha(2)}p_{j} + \ldots + (p_{\alpha(n)} - 1)\prod\limits_{j < \alpha(n)}p_{j}} \\
  & {= \prod\limits_{j < \alpha(2)}p_{j} + (p_{\alpha(2)} - 1)\prod\limits_{j < \alpha(2)}p_{j} + \ldots + (p_{\alpha(n)} - 1)\prod\limits_{j < \alpha(n)}p_{j}} \\
@@ -1395,7 +1402,7 @@ $$\begin{matrix}
  & {= \prod\limits_{j \leq \alpha(n)}p_{j}} \\
  & {\leq \prod\limits_{j \leq k}p_{j}} \\
  & {= N}
-\end{matrix}$$
+\end{aligned}$$
 
 因此，我们有 $f_{(E,\alpha)}:\lbrack 0,N^{\alpha}) \rightarrow \lbrack 0,N) \subset \mathbb{N}$。
 因为 𝑓(𝐸,𝛼) 是一个多线性函数，并且由于规范同构，𝑓(𝐸,𝛼) 可以描述为多线性函数
@@ -1407,7 +1414,7 @@ $$\begin{array}{r}
 我们记一个向量空间 $V = \lbrack 0,p_{\alpha(1)}) \times \lbrack 0,p_{\alpha(2)}) \times \ldots \times \lbrack 0,p_{\alpha(n)})$ 和一个向量空间  $W = \lbrack 0,p_{1}) \times \lbrack 0,p_{2}) \times \ldots \times \lbrack 0,p_{k})$。那么布局函数 𝑓(𝐸,𝛼) 是一个线性映射 𝑉→𝑊。
 假设 𝑣1, 𝑣2, 𝑎𝑣1, 𝑏𝑣2, 𝑎𝑣1 + 𝑏𝑣2 ∈𝑉，𝑓(𝐸,𝛼)(𝑣1) = 𝑤1，且 𝑓(𝐸,𝛼)(𝑣2) = 𝑤2。那么我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{(E,\alpha)}(v_{1})} & {= v_{1,1}d_{1} + v_{1,2}d_{2} + \ldots + v_{1,n}d_{n}} \\
 {f_{(E,\alpha)}(v_{2})} & {= v_{2,1}d_{1} + v_{2,2}d_{2} + \ldots + v_{2,n}d_{n}} \\
 {f_{(E,\alpha)}(av_{1})} & {= av_{1,1}d_{1} + av_{1,2}d_{2} + \ldots + av_{1,n}d_{n}} \\
@@ -1416,16 +1423,16 @@ $$\begin{matrix}
  & {= bf_{(E,\alpha)}(v_{2})} \\
 {f_{(E,\alpha)}(av_{1} + bv_{2})} & {= (av_{1} + bv_{2})_{1}d_{1} + (av_{1} + bv_{2})_{2}d_{2} + \ldots + (av_{1} + bv_{2})_{n}d_{n}} \\
  & {= af_{(E,\alpha)}(v_{1}) + bf_{(E,\alpha)}(v_{2})}
-\end{matrix}$$
+\end{aligned}$$
 
 所以 𝑓(𝐸,𝛼) ∶𝑉→𝑊确实是一个线性（多线性）映射。
 给定一个索引 1 ≤𝑖≤𝛼，令 𝛿𝑖∈ℕ×𝛼表示在所有位置为零，除了第 𝑘 个位置为 1 的坐标。注意这里的索引是 1 开始的，而不是命题 2.14 中使用的类似的 0 开始索引。对于 1 ≤𝑖≤𝛼，𝛿𝑖是向量空间 𝑉的基向量。
 我们将 𝛿𝑖发送到 𝑓(𝐸,𝛼)，其中 1 ≤𝑖≤𝛼。那么我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{(E,\alpha)}(\delta_{i})} & {= d_{i}} \\
  & {= \prod\limits_{j < \alpha(i)}p_{j}}
-\end{matrix}$$
+\end{aligned}$$
 
 给定规范同构 $\lbrack 0,N) \cong \lbrack 0,p_{1}) \times \lbrack 0,p_{2}) \times \ldots \times \lbrack 0,p_{k})$，我们有多线性函数 $g:W\overset{}{\rightarrow}\mathbb{N}$
 
@@ -1444,14 +1451,14 @@ $$\begin{matrix}
 这意味着向量空间 𝑉中的基向量 𝛿𝑖被多线性函数发送到向量空间 𝑊中的基向量 𝛽𝛼(𝑖)。
 假设 𝑣= 𝑐1𝛿1 + 𝑐2𝛿2 + … + 𝑐𝛼𝛿𝛼∈𝑉。那么我们有
 
-$$\begin{matrix}
+$$\begin{aligned}
 {f_{(E,\alpha)}(v)} & {= f_{(E,\alpha)}(c_{1}\delta_{1} + c_{2}\delta_{2} + \ldots + c_{\alpha}\delta_{\alpha})} \\
  & {= (c_{1}\delta_{1} + c_{2}\delta_{2} + \ldots + c_{\alpha}\delta_{\alpha})_{1}d_{1} + (c_{1}\delta_{1} + c_{2}\delta_{2} + \ldots + c_{\alpha}\delta_{\alpha})_{2}d_{2} + \ldots + (c_{1}\delta_{1} + c_{2}\delta_{2} + \ldots + c_{\alpha}\delta_{\alpha})_{\alpha}d_{\alpha}} \\
  & {= c_{1}d_{1} + c_{2}d_{2} + \ldots + c_{\alpha}d_{\alpha}} \\
  & {= c_{1}f_{(E,\alpha)}(\delta_{1}) + c_{2}f_{(E,\alpha)}(\delta_{2}) + \ldots + c_{\alpha}f_{(E,\alpha)}(\delta_{\alpha})} \\
  & {= c_{1}g(\beta_{\alpha(1)}) + c_{2}g(\beta_{\alpha(2)}) + \ldots + c_{\alpha}g(\beta_{\alpha(\alpha)})} \\
  & {= g(c_{1}\beta_{\alpha(1)} + c_{2}\beta_{\alpha(2)} + \ldots + c_{\alpha}\beta_{\alpha(\alpha)})}
-\end{matrix}$$
+\end{aligned}$$
 
 因此，我们为多线性函数 𝑓(𝐸,𝛼) ∶𝑉→𝑊建立了基向量映射。
 给定 𝑣= 𝑐1𝛿1 + 𝑐2𝛿2 + … + 𝑐𝛼𝛿𝛼∈𝑉，它映射到 𝑤= 𝑐1𝛽𝛼(1) + 𝑐2𝛽𝛼(2) + … + 𝑐𝛼𝛽𝛼(𝛼) ∈𝑊。
