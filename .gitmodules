@@ -19,3 +19,6 @@
 [submodule "doc/cute-gemm"]
 	path = doc/cute-gemm
 	url = https://github.com/reed-lau/cute-gemm.git
+[submodule "3rdparty/ppq"]
+	path = 3rdparty/ppq
+	url = https://github.com/openppl-public/ppq.git
