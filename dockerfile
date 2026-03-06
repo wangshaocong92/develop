@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     zsh \
     sudo \
+    clangd \
+    clang \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -78,6 +80,7 @@ RUN pip install --no-cache-dir conan
 
 # 生成默认 conan profile
 RUN conan profile detect
+
 
 # 可选：创建并激活一个默认的 conda 环境（例如从 environment.yml）
 # COPY environment.yml ${HOME}/environment.yml
