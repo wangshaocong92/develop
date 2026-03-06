@@ -66,7 +66,7 @@ ENV CONDA_DIR=${HOME}/miniforge3
 #     && rm ${HOME}/miniforge.sh \
 #     && ${CONDA_DIR}/bin/conda clean --all -y
 # 使用本地文件（如果已经下载好了 Miniforge3 安装脚本）
-COPY /home/wsc/work/Miniforge3-24.11.3-0-Linux-x86_64.sh ${HOME}/miniforge.sh
+COPY Miniforge3-24.11.3-0-Linux-x86_64.sh ${HOME}/miniforge.sh
 RUN  bash ${HOME}/miniforge.sh -b -p ${CONDA_DIR} \
     && rm ${HOME}/miniforge.sh \
     && ${CONDA_DIR}/bin/conda clean --all -y
