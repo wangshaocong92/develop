@@ -10,5 +10,10 @@ include_directories(
 add_executable(cutlass_example main.cu)
 target_link_libraries(cutlass_example PRIVATE nvidia::cutlass::cutlass)
 
+add_executable(gemm gemm.cu)
+
+target_link_libraries(gemm PRIVATE nvidia::cutlass::cutlass)
+
 
 install(TARGETS cutlass_example DESTINATION bin)
+install(TARGETS gemm DESTINATION bin)
