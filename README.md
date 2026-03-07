@@ -7,7 +7,11 @@
 
 ### 镜像的构建
 
-请在文件的同级目录执行```docker build -t wsc_ubuntu24.04  .  --build-arg USERNAME=$(whoami) --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)```。此命令会生成一个此项目所需的镜像
+请在文件的同级目录执行
+```
+docker build -t wsc_ubuntu24.04  .  --build-arg USERNAME=$(whoami) --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)  --build-arg GIT_USER_NAME=? --build-arg  GIT_USER_EMAIL=?
+```
+此命令会生成一个此项目所需的镜像
 
 ### 启动镜像
 ```docker run -itd --gpus all --user $(whoami) -v ${work path}:/home/$(whoami)/workspace -v ${user conan pkg path}:/home/$(whoami)/.conan2/p ${your-name} zsh```

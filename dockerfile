@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     clangd \
     clang \
+    openssh-server \
+    tmux \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,6 +37,10 @@ ENV DEBIAN_FRONTEND=dialog
 ARG USERNAME=wsc
 ARG USER_UID=1000
 ARG USER_GID=1000
+
+
+ARG GIT_USER_NAME
+ARG GIT_USER_EMAIL
 
 
 RUN set -ex; \
@@ -78,7 +84,7 @@ RUN  apt-get update \
 # ========== 可选：安装 Oh My Zsh ==========
 # 这步以非 root 用户身份执行，安装到用户家目录
 USER $USERNAME
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
+RUN sh -c "$(curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
     # 可选：自定义主题或插件，例如：
     # sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
     # git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
@@ -111,6 +117,9 @@ RUN pip install --no-cache-dir conan
 
 # 生成默认 conan profile
 RUN conan profile detect
+
+RUN git config --global user.name $GIT_USER_NAME
+RUN git config --global user.email $GIT_USER_EMAIL
 
 
 # 可选：创建并激活一个默认的 conda 环境（例如从 environment.yml）
