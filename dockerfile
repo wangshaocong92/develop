@@ -59,24 +59,24 @@ ENV HOME=/home/$USERNAME
 
 # 安装 Miniforge3 到用户家目录
 ENV MINIFORGE_VERSION=24.11.3-0
-ENV MINIFORGE_URL=https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh
+ENV MINIFORGE_URL=https://gh-proxy.org/https://github.com/conda-forge/miniforge/releases/download/24.11.3-0/Miniforge3-24.11.3-0-Linux-x86_64.sh
 ENV CONDA_DIR=${HOME}/miniforge3
 
-# 从网络上获取
-# RUN wget --progress=bar:force ${MINIFORGE_URL} -O ${HOME}/miniforge.sh \
-#     && bash ${HOME}/miniforge.sh -b -p ${CONDA_DIR} \
-#     && rm ${HOME}/miniforge.sh \
-#     && ${CONDA_DIR}/bin/conda clean --all -y
+
 # 使用本地文件（如果已经下载好了 Miniforge3 安装脚本）
-COPY Miniforge3-24.11.3-0-Linux-x86_64.sh ${HOME}/miniforge.sh
-RUN  bash ${HOME}/miniforge.sh -b -p ${CONDA_DIR} \
+# COPY Miniforge3-24.11.3-0-Linux-x86_64.sh ${HOME}/miniforge.sh
+# 从网络上获取
+RUN wget --progress=bar:force ${MINIFORGE_URL} -O ${HOME}/miniforge.sh
+RUN bash ${HOME}/miniforge.sh -b -p ${CONDA_DIR} \
     && rm ${HOME}/miniforge.sh \
     && ${CONDA_DIR}/bin/conda clean --all -y
+    
 # 将 conda 加入 PATH
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 
 # 安装 conan（使用 pip）
 RUN pip install --no-cache-dir conan
+
 
 # 生成默认 conan profile
 RUN conan profile detect
