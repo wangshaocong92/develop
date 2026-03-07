@@ -33,9 +33,40 @@ ENV DEBIAN_FRONTEND=dialog
 
 # 创建普通用户 wsc（不指定 UID/GID，避免与系统冲突）
 ARG USERNAME=wsc
+ARG USER_UID=1000
+ARG USER_GID=1000
 
-RUN  useradd -m -s /usr/bin/zsh $USERNAME \
-    && apt-get update \
+
+RUN set -ex; \
+    # 处理组：确保存在 GID=$USER_GID 且组名为 $USERNAME
+    if getent group $USER_GID >/dev/null; then \
+        current_group=$(getent group $USER_GID | cut -d: -f1); \
+        if [ "$current_group" != "$USERNAME" ]; then \
+            groupmod -n $USERNAME $current_group; \
+        fi; \
+    else \
+        groupadd --gid $USER_GID $USERNAME; \
+    fi; \
+    # 处理用户：确保存在 UID=$USER_UID 且用户名为 $USERNAME
+    if id -u $USER_UID >/dev/null 2>&1; then \
+        current_user=$(getent passwd $USER_UID | cut -d: -f1); \
+        if [ "$current_user" != "$USERNAME" ]; then \
+            # 修改用户名，并移动家目录到 /home/$USERNAME
+            usermod -l $USERNAME -d /home/$USERNAME -m $current_user; \
+        fi; \
+    else \
+        useradd --uid $USER_UID --gid $USER_GID -m $USERNAME; \
+    fi; \
+    # 安装 sudo（如果基础镜像中没有）
+    apt-get update && apt-get install -y sudo; \
+    # 赋予用户免密 sudo 权限
+    echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME; \
+    chmod 0440 /etc/sudoers.d/$USERNAME; \
+    # 设置默认 shell 为 zsh（需确保 zsh 已安装，你之前的步骤已安装）
+    chsh -s /usr/bin/zsh $USERNAME; \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN  apt-get update \
     && apt-get install -y sudo \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
