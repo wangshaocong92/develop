@@ -14,6 +14,6 @@ docker build -t wsc_ubuntu24.04  .  --build-arg USERNAME=$(whoami) --build-arg U
 此命令会生成一个此项目所需的镜像
 
 ### 启动镜像
-```docker run -itd --gpus all --user $(whoami) -v ${work path}:/home/$(whoami)/workspace -v ${user conan pkg path}:/home/$(whoami)/.conan2/p ${your-name} zsh```
-eg.
-```docker run -itd --gpus all --user wsc -v /home/wsc-machine/code/develop:/home/wsc/workspace -v /home/wsc-machine/.conan2/p:/home/wsc/.conan2/p wsc-ubuntu24.04  zsh ```
+```
+docker run -itd --gpus all --user $(id -u):$(id -g) -v /home/wsc-machine/code/develop:/home/wsc-machine/workspace -v /home/wsc-machine/.ssh:/home/wsc-machine/.ssh -v /home/wsc-machine/.conan2/p:/home/wsc-machine/.conan2/p wsc_ubuntu24.04 
+```
