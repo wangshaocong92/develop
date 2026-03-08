@@ -45,3 +45,4 @@ unit_test_reports
 *.pb.cc
 *.txt.user*
 test_logs
+CMakeUserPresets.json
