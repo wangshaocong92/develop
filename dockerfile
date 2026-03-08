@@ -1,5 +1,5 @@
 # 使用官方 CUDA 运行时镜像作为基础
-FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
 
 # 避免安装时出现交互式提示
 ENV DEBIAN_FRONTEND=noninteractive
@@ -25,8 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     clangd \
     clang \
+    ninja-build \
     openssh-server \
     tmux \
+    pkg-config \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

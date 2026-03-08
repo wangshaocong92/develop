@@ -34,7 +34,7 @@ class DevelopConan(ConanFile):
         self.options["ffmpeg"].with_openh264 = False
         self.options["ffmpeg"].with_vaapi = False
         self.options["ffmpeg"].with_vulkan = False
-        # self.options["ffmpeg"].with_xcb = False
+        self.options["ffmpeg"].with_xcb = False
         self.options["ffmpeg"].with_vdpau = False
 
     def configure(self):
@@ -71,7 +71,7 @@ class DevelopConan(ConanFile):
         self.requires("toml11/3.7.0")
         self.requires("sqlite3/3.39.4", force=True)
         self.requires("yaml-cpp/0.8.0")
-        self.requires("pcl/1.13.1")
+        self.requires("pcl/1.14.1")
         self.requires("libyuv/1880")
         self.requires("proj/9.5.0")
         self.requires("nlohmann_json/3.11.2", override=True)
@@ -81,17 +81,17 @@ class DevelopConan(ConanFile):
         self.requires("taskflow/3.8.0")
         self.requires("concurrentqueue/1.0.4")
         self.requires("cnpy/cci.20180601")
-        # self.requires("numcpp/2.12.1")
+        self.requires("numcpp/2.12.1")
         self.requires("zlib/1.2.13")
         self.requires("osqp/0.6.3")
-        self.requires("cutlass/3.5.1")
+        self.requires("cutlass/4.3.5")
         self.requires("xz_utils/5.4.5")
         self.requires("sml/1.1.11")
         self.requires("readerwriterqueue/1.0.6")
         self.requires("bshoshany-thread-pool/5.0.0")
         self.requires("gtest/1.15.0")
         self.requires("quill/7.3.0")
-        # self.requires("ffmpeg/4.3.2")
+        self.requires("ffmpeg/8.0.1")
         self.requires("asio/1.28.1", override=True)
         self.requires("flatbuffers/1.12.0")
         self.requires("jsoncpp/1.9.5")
