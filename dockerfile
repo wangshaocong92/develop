@@ -28,7 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     openssh-server \
     tmux \
+    texlive-full \
     pkg-config \
+    clang-format \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
