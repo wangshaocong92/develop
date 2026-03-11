@@ -1,10 +1,11 @@
-#include "print.h"
+#include <cutlass/uint128.h>
 #include <cute/layout.hpp>
 #include <cute/numeric/integral_constant.hpp>
 #include <cute/swizzle.hpp>
 #include <cute/tensor.hpp>
+#include <cute/tensor_impl.hpp>
 #include <cute/util/print_latex.hpp>
-#include <cutlass/uint128.h>
+#include "print.h"
 
 using namespace cute;
 
@@ -31,7 +32,7 @@ struct GemmConfig
       LayoutA_TV: ((_4,_8),(_2,_2,_2)):((_32,_1),(_16,_8,_128))
       LayoutB_TV: ((_4,_8),(_2,_2)):((_16,_1),(_8,_64))
       LayoutC_TV: ((_4,_8),(_2,_2)):((_32,_1),(_16,_8))
-*/
+  */
   using MmaAtom =
       MMA_Atom<MmaTraits>; /// mma atom
                            /// 单位mma的计算工具即单个warp计算的矩阵大小
@@ -135,6 +136,64 @@ struct GemmConfig
       ));
 };
 
+__global__ void gemm_kernel(cute::half_t *ptr_a, cute::half_t *ptr_b, cute::half_t *ptr_c, int m,
+                            int n, int k) {
+  /// shared memory 申请
+  /// 计算大小
+  constexpr auto smem_size = cosize(typename GemmConfig::SmemLayoutA{}) * 2;
+  __shared__ cute::half_t smem[smem_size];
+  auto sa_ptr = smem;
+  auto sb_ptr = smem + cosize(typename GemmConfig::SmemLayoutA{});
+  int idx = threadIdx.x;
+  auto ga = make_tensor(ptr_a, make_shape(m, k), make_stride(k, Int<1>{}));
+  auto gb = make_tensor(ptr_b, make_shape(n, k), make_stride(k, Int<1>{}));
+  auto gc = make_tensor(ptr_c, make_shape(m, n), make_stride(n, Int<1>{}));
+  // slice the tensor to small one which is used for current thread block.
+  Tensor gA = local_tile(ga, make_tile(Int<GemmConfig::MPerBlock>{}, Int<GemmConfig::KPerBlock>{}),
+                         make_coord(blockIdx.y, _));  // (kTileM, kTileK, k)
+  Tensor gB = local_tile(gb, make_tile(Int<GemmConfig::NPerBlock>{}, Int<GemmConfig::KPerBlock>{}),
+                         make_coord(blockIdx.x, _));  // (kTileN, kTileK, k)
+  Tensor gD = local_tile(gc, make_tile(Int<GemmConfig::MPerBlock>{}, Int<GemmConfig::NPerBlock>{}),
+                         make_coord(blockIdx.y, blockIdx.x));           // (kTileM, kTileN)
+  Tensor sA = make_tensor(sa_ptr, typename GemmConfig::SmemLayoutA{});  // (kTileM, kTileK, 3)
+  Tensor sB = make_tensor(sb_ptr, typename GemmConfig::SmemLayoutB{});  // (kTileN, kTileK, 3)
+  GemmConfig::Mma mma;
+  auto thead_mma = mma.get_slice(idx);
+  /*
+    register 存储矩阵
+     A寄存器布局: (kTileM, kTileK) => (4, 32) * (2, 2, 2)
+     B寄存器布局: (kTileN, kTileK) => (4, 32) * (2, 2)
+     C寄存器布局: (kTileM, kTileN) => (4, 32) * (2, 2)
+  */
+  auto ra = thead_mma.partition_fragment_A(gA(_, _, 0));
+  auto rb = thead_mma.partition_fragment_B(gB(_, _, 0));
+  auto cd = thead_mma.partition_fragment_C(gD);
+  clear(cd);
+
+  GemmConfig::G2SCopyA g2s_copy_a;
+  auto thead_g2s_copy_a = g2s_copy_a.get_slice(idx);
+  auto gta = thead_g2s_copy_a.partition_S(gA);
+  auto sta = thead_g2s_copy_a.partition_D(sA);
+
+  GemmConfig::G2SCopyA g2s_copy_b;
+  auto thead_g2s_copy_b = g2s_copy_b.get_slice(idx);
+  auto gtb = thead_g2s_copy_b.partition_S(gB);
+  auto stb = thead_g2s_copy_b.partition_D(sB);
+
+  GemmConfig::S2RCopyTillA s2r_copy_a;
+  auto thead_s2r_copy_a = s2r_copy_a.get_slice(idx);
+  auto tra = thead_s2r_copy_a.partition_S(sA);
+  auto rta = thead_s2r_copy_a.retile_D(ra);
+  GemmConfig::S2RCopyTillB s2r_copy_b;
+  auto thead_s2r_copy_b = s2r_copy_b.get_slice(idx);    
+  auto trb = thead_s2r_copy_b.partition_S(sB);
+  auto rtb = thead_s2r_copy_b.retile_D(rb);
+
+  int bf_size = size<2>(GemmConfig::SmemLayoutA{});
+
+  cute::copy(g2s_copy_a, gta(_,_,_,0), sta(_,_,_,0));
+
+}
 
 int main()
 {
@@ -142,7 +201,7 @@ int main()
     constexpr int M = 128 * 128;
     constexpr int N = 128 * 128;
     constexpr int K = 128;
-    print_latex(GemmConfig::S2GCopyC{});
-
+    print(GemmConfig::G2SCopyA::Tiler_MN{});
     return 0;
 }
+

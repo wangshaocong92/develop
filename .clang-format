@@ -1,0 +1,97 @@
+# .clang-format 常用配置 (基于 Google 风格)
+---
+Language:        Cpp
+# 基于 Google 风格
+BasedOnStyle:    Google
+
+# 列宽限制（Google 默认 80，改为 100 更符合现代显示器）
+ColumnLimit:     100
+
+# 缩进宽度（Google 默认 2，这里保持 2，可根据需要改为 4）
+IndentWidth:     2
+# 连续调用/连续声明缩进宽度
+ContinuationIndentWidth: 4
+
+# 制表符使用
+UseTab:          Never
+
+# 指针和引用的对齐方式
+PointerAlignment: Left        # 将 * 和 & 靠左对齐 (int* x)
+# 若希望靠右对齐，改为 Right (int *x)
+
+# 访问修饰符（public, private, protected）的偏移量
+# Google 风格为 -1，表示修饰符与类声明对齐；正数表示额外缩进
+AccessModifierOffset: -1
+
+# 命名空间不缩进内部内容
+NamespaceIndentation: None
+
+# 修复命名空间结束处的注释（自动添加 // namespace <name>）
+FixNamespaceComments: true
+
+# 括号内对齐（false 为不强制）
+AlignAfterOpenBracket: Align   # 按括号对齐参数，若超长则换行
+
+# 连续声明（如 int a, b;）中对齐
+AlignConsecutiveDeclarations: false
+
+# 连续赋值（如 a = 1; b = 2;）中对齐
+AlignConsecutiveAssignments: false
+
+# 操作符（如 <<）换行位置
+PenaltyExcessCharacter: 100
+PenaltyReturnTypeOnItsOwnLine: 200
+
+# 允许短块单行
+AllowShortBlocksOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline   # 内联函数可单行
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+
+# 构造函数初始化列表格式
+ConstructorInitializerIndentWidth: 4
+BreakConstructorInitializers: BeforeColon   # 冒号前换行
+
+# 注释格式
+AlignTrailingComments: true
+
+# 包括头文件排序
+SortIncludes:    true
+
+# 空行保留最大数量
+MaxEmptyLinesToKeep: 2
+
+# 括号内空格
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements        # if/for 等后加空格
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# 模板声明中尖括号周围无空格
+Standard:        Auto
+
+# 换行符
+UseCRLF:         false
+
+# 允许重排包括 C 头文件
+IncludeBlocks:   Preserve   # 保持原有分组
+
+# 针对特定宏的格式化
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+
+# 尾随 return 注释
+ReflowComments:  true
+
+# 长字符串字面量不分割
+PenaltyBreakString: 1000
+
+# 二元操作符换行位置
+BreakBeforeBinaryOperators: None
