@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-full \
     pkg-config \
     clang-format \
+    libssl-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
