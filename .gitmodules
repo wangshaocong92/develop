@@ -22,3 +22,6 @@
 [submodule "3rdparty/ppq"]
 	path = 3rdparty/ppq
 	url = https://github.com/openppl-public/ppq.git
+[submodule "3rdparty/TensorRT"]
+	path = 3rdparty/TensorRT
+	url = https://github.com/NVIDIA/TensorRT.git

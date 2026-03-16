@@ -1,10 +1,12 @@
-#include <cstdint>
 #include <cublas_v2.h>
 #include <cuda.h>
 #include <stdarg.h>
 #include <stdio.h>
 
+#include <cute/layout.hpp>
+#include <cute/swizzle.hpp>
 #include <cute/tensor.hpp>
+#include <cute/util/debug.hpp>
 
 #include "detail/cublaslt-gemm.h"
 #include "detail/data.h"
@@ -24,21 +26,18 @@ gemm_multi_stage(void *Dptr, const void *Aptr, const void *Bptr, int m, int n,
 
   using S2RCopyAtomA = typename Config::S2RCopyAtomA;
   using S2RCopyAtomB = typename Config::S2RCopyAtomB;
-  using S2RCopyTileA =  typename Config::S2RCopyTileA;
-  using S2RCopyTileB =  typename Config::S2RCopyTileB;
   using G2SCopyA = typename Config::G2SCopyA;
   using G2SCopyB = typename Config::G2SCopyB;
   using R2SCopyAtomC = typename Config::R2SCopyAtomC;
-  using R2SCopyTileC = typename Config::R2SCopyTileC;
+  using S2GCopyAtomC = typename Config::S2GCopyAtomC;
   using S2GCopyC = typename Config::S2GCopyC;
 
   constexpr int kTileM = Config::kTileM;
   constexpr int kTileN = Config::kTileN;
   constexpr int kTileK = Config::kTileK;
   constexpr int kStage = Config::kStage;
-  constexpr uint32_t shm_size = cute::cosize(SmemLayoutA{}) * 2;
 
-  __shared__ T shm_data[shm_size];
+  extern __shared__ T shm_data[];
 
   T *Ashm = shm_data;
   T *Bshm = shm_data + cute::cosize(SmemLayoutA{});
@@ -81,12 +80,12 @@ gemm_multi_stage(void *Dptr, const void *Aptr, const void *Bptr, int m, int n,
   clear(tCrD);
 
   // gmem -cp.async-> shm -ldmatrix-> reg
-  S2RCopyTileA s2r_tiled_copy_a; 
+  auto s2r_tiled_copy_a = make_tiled_copy_A(S2RCopyAtomA{}, tiled_mma);
   auto s2r_thr_copy_a = s2r_tiled_copy_a.get_slice(idx);
   auto tAsA = s2r_thr_copy_a.partition_S(sA);  // ? (CPY, CPY_M, CPY_K, kStage)
   auto tCrA_view = s2r_thr_copy_a.retile_D(tCrA);  // ? (CPY, CPY_M, CPY_K)
 
-  S2RCopyTileB s2r_tiled_copy_b;
+  auto s2r_tiled_copy_b = make_tiled_copy_B(S2RCopyAtomB{}, tiled_mma);
   auto s2r_thr_copy_b = s2r_tiled_copy_b.get_slice(idx);
   auto tBsB = s2r_thr_copy_b.partition_S(sB);  // ? (CPY, CPY_M, CPY_K, kStage)
   auto tCrB_view = s2r_thr_copy_b.retile_D(tCrB);  // ? (CPY, CPY_M, CPY_K)
@@ -122,6 +121,7 @@ gemm_multi_stage(void *Dptr, const void *Aptr, const void *Bptr, int m, int n,
   }
 
   // wait one submitted gmem->smem done
+#if 0
   cp_async_wait<kStage - 2>();
   __syncthreads();
 
@@ -170,12 +170,32 @@ gemm_multi_stage(void *Dptr, const void *Aptr, const void *Bptr, int m, int n,
       cute::gemm(tiled_mma, tCrD, tCrA(_, _, ik), tCrB(_, _, ik), tCrD);
     }  // for ik
   }    // itile
-
+#else
+  int ntile = k / kTileK;
+#pragma unroll 1
+  for (int itile = 0; itile < ntile; ++itile) {
+    cp_async_wait<kStage - 2>();
+    __syncthreads();
+    cute::copy(s2r_tiled_copy_a, tAsA(_, _, _, ismem_read), tCrA_view);
+    cute::copy(s2r_tiled_copy_b, tBsB(_, _, _, ismem_read), tCrB_view);
+    ismem_read = (ismem_read + 1) % kStage;
+    cute::gemm(tiled_mma, tCrD, tCrA, tCrB, tCrD);
+    if (itile_to_read < ntile) {
+      cute::copy(g2s_tiled_copy_a, tAgA_copy(_, _, _, itile_to_read),
+                 tAsA_copy(_, _, _, ismem_write));
+      cute::copy(g2s_tiled_copy_b, tBgB_copy(_, _, _, itile_to_read),
+                 tBsB_copy(_, _, _, ismem_write));
+      ++itile_to_read;
+      ismem_write = (ismem_write + 1) % kStage;
+    }
+    cp_async_fence();
+  }
+#endif
   // use less shared memory as a scratchpad tile to use large wide instuction
   // Dreg -> shm -> reg -> global
   auto sC = make_tensor(sA(_, _, ismem_read).data(), SmemLayoutC{});
 
-  R2SCopyTileC r2s_tiled_copy_c;
+  auto r2s_tiled_copy_c = make_tiled_copy_C(R2SCopyAtomC{}, tiled_mma);
   auto r2s_thr_copy_c = r2s_tiled_copy_c.get_slice(idx);
   auto tCrC_r2s = r2s_thr_copy_c.retile_S(tCrD);   // (CPY, CPY_M, CPY_N)
   auto tCsC_r2s = r2s_thr_copy_c.partition_D(sC);  // (CPY, _1, _1, pipe)
@@ -284,9 +304,6 @@ struct GemmConfig {
   using S2RCopyAtomA = s2r_copy_atom;
   using S2RCopyAtomB = s2r_copy_atom;
 
-  using S2RCopyTileA = decltype(make_tiled_copy_A(S2RCopyAtomA{}, MMA{})); 
-  using S2RCopyTileB = decltype(make_tiled_copy_B(S2RCopyAtomB{}, MMA{}));
-
   // epilogue: register to global via shared memory
   using SmemLayoutAtomC = decltype(composition(
       Swizzle<2, 3, 3>{}, make_layout(make_shape(Int<kMmaPM>{}, Int<kMmaPN>{}),
@@ -300,8 +317,6 @@ struct GemmConfig {
                 "C shared memory request is large than A's one pipe");
 
   using R2SCopyAtomC = Copy_Atom<UniversalCopy<int>, T>;
-
-  using R2SCopyTileC = decltype(make_tiled_copy_C(R2SCopyAtomC{}, MMA{}));
 
   using S2GCopyAtomC = Copy_Atom<UniversalCopy<cute::uint128_t>, T>;
   using S2GCopyC =
@@ -340,8 +355,8 @@ int main(int argc, char *argv[]) {
   int K = 256;
 
   int enable_cpu = 0;
-  int enable_cublaslt = 1;
-  int nt = 11;
+  int enable_cublaslt = 0;
+  int nt = 1;
 
   using ComputeType = T;
 
@@ -463,11 +478,24 @@ int main(int argc, char *argv[]) {
     cpu_compare(tD_host_cpu, tD_host, 0.1f);
   }
 
-  auto tile = make_tile(min(8, M), min(8, N));
-  auto t32x32 = local_tile(tD_host, tile, make_coord(0, 0));
-  auto t32x32_cpu = local_tile(tD_host_cpu, tile, make_coord(0, 0));
-  auto t32x32_blas = local_tile(tD_host_blas, tile, make_coord(0, 0));
-  auto t32x32_cublaslt = local_tile(tD_host_cublaslt, tile, make_coord(0, 0));
+  constexpr int n = 8;
+  constexpr int m = 8;
+  constexpr int n_ = 0;
+  constexpr int m_ = 0;
+  constexpr int v = 3627844;
+  constexpr int vm = 3627844 / (m * n);
+  constexpr int vn = (3627844 - vm * m * n) / (m * n);
+
+  auto tile = make_tile(min(m, M), min(n, N));
+  // auto t32x32 = local_tile(tD_host, tile, make_coord(vm, vn));
+  // auto t32x32_cpu = local_tile(tD_host_cpu, tile, make_coord(vm, vn));
+  // auto t32x32_blas = local_tile(tD_host_blas, tile,  make_coord(vm, vn));
+  // auto t32x32_cublaslt = local_tile(tD_host_cublaslt, tile,  make_coord(vm, vn));
+  auto t32x32 = local_tile(tD_host, tile, make_coord((M / m - 1) - m_, (N / n - 1) - n_));
+  auto t32x32_cpu = local_tile(tD_host_cpu, tile, make_coord((M / m - 1) - m_, (N / n - 1) - n_));
+  auto t32x32_blas = local_tile(tD_host_blas, tile, make_coord((M / m - 1) - m_, (N / n - 1) - n_));
+  auto t32x32_cublaslt =
+      local_tile(tD_host_cublaslt, tile, make_coord((M / m - 1) - m_, (N / n - 1) - n_));
 
   printf("M = %d, N = %d, K = %d\n", M, N, K);
 

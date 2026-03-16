@@ -9,7 +9,7 @@
 
 using namespace cute;
 
-
+#define SMemStage 3
 
 struct GemmConfig
 {
@@ -62,6 +62,7 @@ struct GemmConfig
   */
   using Mma = decltype(make_tiled_mma(MmaAtom{}, MmaEURepeatT{}, MmaPT{}));
 
+
   /// shared memory layout
   /*
     shared -> register 主要使用ldmatrix指令。
@@ -71,11 +72,9 @@ struct GemmConfig
       Swizzle<2, 3, 3>{}, make_layout(make_shape(Int<8>{}, Int<32>{}),
                                       make_stride(Int<32>{}, Int<1>{}))));
   using SmemLayoutA = decltype(tile_to_shape(
-      SmemLayoutAtom{},
-      make_shape(Int<MPerBlock>{}, Int<KPerBlock>{}, Int<3>{})));
+      SmemLayoutAtom{}, make_shape(Int<MPerBlock>{}, Int<KPerBlock>{}, Int<SMemStage>{})));
   using SmemLayoutB = decltype(tile_to_shape(
-      SmemLayoutAtom{},
-      make_shape(Int<NPerBlock>{}, Int<KPerBlock>{}, Int<3>{})));
+      SmemLayoutAtom{}, make_shape(Int<NPerBlock>{}, Int<KPerBlock>{}, Int<SMemStage>{})));
 
   /// 共享内存矩阵c的目标是复用共享内存A或者B的已计算数据。这样可以减少内存申请和暂用
   using SmemLayoutAtomC = decltype(composition(
@@ -138,6 +137,7 @@ struct GemmConfig
 
 __global__ void gemm_kernel(cute::half_t *ptr_a, cute::half_t *ptr_b, cute::half_t *ptr_c, int m,
                             int n, int k) {
+                                #if 0
   /// shared memory 申请
   /// 计算大小
   constexpr auto smem_size = cosize(typename GemmConfig::SmemLayoutA{}) * 2;
@@ -177,7 +177,7 @@ __global__ void gemm_kernel(cute::half_t *ptr_a, cute::half_t *ptr_b, cute::half
 
   GemmConfig::G2SCopyA g2s_copy_b;
   auto thead_g2s_copy_b = g2s_copy_b.get_slice(idx);
-  auto gtb = thead_g2s_copy_b.partition_S(gB);
+  auto gtb = thead_g2s_copy_b.partition_S(gB);  //// (8,4,1,8)
   auto stb = thead_g2s_copy_b.partition_D(sB);
 
   GemmConfig::S2RCopyTillA s2r_copy_a;
@@ -189,10 +189,31 @@ __global__ void gemm_kernel(cute::half_t *ptr_a, cute::half_t *ptr_b, cute::half
   auto trb = thead_s2r_copy_b.partition_S(sB);
   auto rtb = thead_s2r_copy_b.retile_D(rb);
 
-  int bf_size = size<2>(GemmConfig::SmemLayoutA{});
+  /// 记录一些执行过程
+  int load_global_count = 0;
+  int s_mem_stage_buf_index = 0;
 
-  cute::copy(g2s_copy_a, gta(_,_,_,0), sta(_,_,_,0));
+  for (auto i = 0; i < SMemStage; i++) {
+    cute::copy(g2s_copy_a, gta(_, _, _, load_global_count), sta(_, _, _, i));
+    cute::copy(g2s_copy_b, gtb(_, _, _, load_global_count), stb(_, _, _, i));
+    load_global_count++;
+    s_mem_stage_buf_index++;
+    cute::cp_async_fence();
+  }
 
+  cute::cp_async_wait<1>();
+  __syncthreads();
+  int loaded_global_count = 0;
+  /// smem 2 register
+  cute::copy(s2r_copy_a, tra(_, _, _, loaded_global_count), rta);
+  cute::copy(g2s_copy_b, trb(_, _, _, loaded_global_count), rtb);
+
+  //// 获取一下 k被分成了多少个tile
+  int k_tile_count = (k + GemmConfig::KPerBlock - 1) / GemmConfig::KPerBlock;
+  for (int ktile = 0; ktile < k_tile_count; ktile++) {
+    cute::gemm(mma, ra, rb, cd);
+  }
+  #endif
 }
 
 int main()

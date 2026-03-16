@@ -1,6 +1,7 @@
 #include <cuda.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdio>
 
 template <typename T>
 void cpu_rand_data(T *c);
@@ -140,6 +141,7 @@ __global__ void gpu_compare_kernel(const T *x, const T *y, int n,
   float diff = fabs(v0 - v1);
   if (diff > threshold) {
     atomicAdd(count, 1);
+    printf("idx = %d, x = %f, y = %f\n", idx, v0, v1);
 
     // for positive floating point, there int representation is in the same
     // order.
