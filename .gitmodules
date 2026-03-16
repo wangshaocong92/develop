@@ -25,3 +25,6 @@
 [submodule "3rdparty/TensorRT"]
 	path = 3rdparty/TensorRT
 	url = https://github.com/NVIDIA/TensorRT.git
+[submodule "3rdparty/vision"]
+	path = 3rdparty/vision
+	url = https://github.com/pytorch/vision.git
