@@ -15,5 +15,5 @@ docker build -t wsc_ubuntu24.04  .  --build-arg USERNAME=$(whoami) --build-arg U
 
 ### 启动镜像
 ```
-docker run -itd --gpus all --user $(id -u):$(id -g) -v /home/wsc-machine/code/develop:/home/wsc-machine/workspace -v /home/wsc-machine/.ssh:/home/wsc-machine/.ssh -v /home/wsc-machine/.conan2/p:/home/wsc-machine/.conan2/p wsc_ubuntu24.04 
+docker run -itd --gpus all --user $(id -u):$(id -g) -v /dev/shm:/dev/shm -v /home/wsc-machine/code/develop:/home/wsc-machine/workspace -v /home/wsc-machine/.ssh:/home/wsc-machine/.ssh -v /home/wsc-machine/.conan2/p:/home/wsc-machine/.conan2/p wsc_ubuntu24.04 
 ```

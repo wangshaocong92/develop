@@ -3,6 +3,8 @@ build/
 cross-install/
 install/
 log/
+.data/
+.model
 
 common/build
 common/install
