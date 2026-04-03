@@ -22,8 +22,8 @@ endif()
 #add_subdirectory(kernel)
 
 
-# add_subdirectory(example/cutlass)
-add_subdirectory(example/leetcode)
+add_subdirectory(example/cutlass)
+# add_subdirectory(example/code)
 
 
 
