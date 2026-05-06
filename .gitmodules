@@ -8,7 +8,7 @@
 	path = doc/cuda_code
 	url = https://github.com/xgqdut2016/cuda_code
 [submodule "doc/flash_attention"]
-	path = doc/flash_attention
+	path = 3rdparty/flash_attention
 	url = https://github.com/Dao-AILab/flash-attention
 [submodule "doc/LeetCUDA"]
 	path = doc/LeetCUDA
