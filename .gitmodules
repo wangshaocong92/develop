@@ -28,3 +28,6 @@
 [submodule "3rdparty/vision"]
 	path = 3rdparty/vision
 	url = https://github.com/pytorch/vision.git
+[submodule "3rdparty/bev_former"]
+	path = 3rdparty/bev_former
+	url = https://github.com/fundamentalvision/BEVFormer.git
