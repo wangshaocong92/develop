@@ -31,3 +31,6 @@
 [submodule "3rdparty/bev_former"]
 	path = 3rdparty/bev_former
 	url = https://github.com/fundamentalvision/BEVFormer.git
+[submodule "3rdparty/Model-Optimizer"]
+	path = 3rdparty/Model-Optimizer
+	url = https://github.com/NVIDIA/Model-Optimizer.git
