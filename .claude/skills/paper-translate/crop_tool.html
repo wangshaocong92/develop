@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>论文图片裁剪工具</title>
+<style>
+:root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --card: #0f3460;
+    --accent: #667eea;
+    --danger: #e94560;
+    --green: #00ff88;
+    --text: #eee;
+    --muted: #aaa;
+}
+body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 1300px; margin: 0 auto; padding: 20px; background: var(--bg); color: var(--text); }
+h1 { text-align: center; color: var(--accent); font-size: 22px; margin-bottom: 0; }
+.subtitle { text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 20px; }
+.toolbar { background: var(--surface); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.toolbar input { width: 70px; background: #1a1a2e; color: #eee; border: 1px solid #555; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
+.toolbar button { background: var(--accent); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.toolbar button:hover { background: #764ba2; }
+.toolbar button.danger { background: var(--danger); }
+.page-container { background: var(--surface); border-radius: 8px; padding: 16px; margin: 16px 0; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.page-title { font-size: 17px; font-weight: bold; color: var(--danger); }
+.page-hint { font-size: 12px; color: var(--muted); }
+.fig-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+.fig-card { background: var(--card); border-radius: 8px; padding: 12px; min-width: 300px; flex: 1; }
+.fig-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.fig-label { font-weight: bold; font-size: 14px; }
+.fig-label input { width: 80px; background: transparent; color: var(--green); border: 1px solid #555; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 14px; }
+.canvas-wrapper { position: relative; display: inline-block; cursor: crosshair; border: 1px solid #333; line-height: 0; }
+.canvas-wrapper canvas { display: block; max-width: 100%; height: auto; }
+.overlay { position: absolute; border: 2px dashed var(--green); background: rgba(0,255,136,0.12); pointer-events: none; }
+.coord-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; flex-wrap: wrap; }
+.coord-row label { color: var(--muted); white-space: nowrap; }
+.coord-row input { width: 52px; background: #1a1a2e; color: var(--green); border: 1px solid #555; padding: 3px 5px; border-radius: 3px; font-size: 12px; font-family: monospace; }
+.coord-row button { font-size: 11px; padding: 3px 8px; }
+.output-card { background: var(--surface); border-radius: 8px; padding: 16px; margin: 20px 0; }
+.output-card h3 { margin: 0 0 8px; font-size: 15px; }
+.output-card pre { background: #0d1117; padding: 14px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 0; }
+.copy-btn { background: var(--danger); color: #fff; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 8px; }
+.copy-btn:hover { opacity: 0.85; }
+</style>
+</head>
+<body>
+
+<h1>论文图片裁剪工具</h1>
+<p class="subtitle">拖拽鼠标框选图片区域 | 手动调整坐标微调 | 点击「复制坐标」导出</p>
+
+<div class="toolbar">
+    <label>扫描页码范围:</label>
+    <input type="number" id="pageFrom" value="1" min="1" max="100" style="width:50px"> –
+    <input type="number" id="pageTo" value="50" min="1" max="100" style="width:50px">
+    <label>每页探测图号范围:</label>
+    <input type="number" id="figFrom" value="1" min="1" max="20" style="width:50px"> –
+    <input type="number" id="figTo" value="10" min="1" max="20" style="width:50px">
+    <button onclick="rescan()">重新扫描</button>
+    <button onclick="loadAll()" style="background:#555">全部加载</button>
+    <button class="danger" onclick="clearAll()">清除全部</button>
+    <span style="font-size:12px;color:var(--muted);margin-left:auto" id="dirInfo"></span>
+</div>
+
+<div id="pages"></div>
+
+<div class="output-card">
+    <h3>裁剪坐标 (Python dict — 可直接用于 2_extract_figures.py)</h3>
+    <pre id="output">// 尚未设置任何裁剪区域</pre>
+    <button class="copy-btn" onclick="copyCoords()">📋 复制坐标</button>
+    <span id="copyMsg" style="color:var(--green);margin-left:12px;font-size:13px;display:none">已复制!</span>
+</div>
+
+<script>
+const SCALE = 2;
+const PW = 595, PH = 842;  // A4 pts
+const MARGIN_X = 48;        // default left/right margin
+
+// ---- State ----
+let cropData = {};   // { 'page5_fig1': {x0,y0,x1,y1,label} }
+const loadedPages = new Set();
+const loadedFigs = new Map(); // page -> [figN, ...]
+
+// Detect which directory we're serving from
+const dir = location.pathname.replace(/\/[^/]*$/, '/');
+document.getElementById('dirInfo').textContent = '目录: ' + dir;
+
+function figKey(page, figNum) { return `page${page}_fig${figNum}`; }
+
+function getStorageKey() {
+    // Use the directory path as localStorage key so different papers don't conflict
+    return 'paper_crops_' + btoa(dir).replace(/[^a-zA-Z0-9]/g, '').slice(-20);
+}
+
+// ---- Image loading ----
+function tryLoadImage(src) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+}
+
+async function detectPages(from, to) {
+    const pages = [];
+    for (let p = from; p <= to; p++) {
+        const img = await tryLoadImage(`page${p}_full.png`);
+        if (img) pages.push({num: p, img});
+    }
+    return pages;
+}
+
+async function detectFigs(pageNum, from, to) {
+    const figs = [];
+    for (let f = from; f <= to; f++) {
+        const img = await tryLoadImage(`fig${f}.png`);
+        if (img) figs.push({num: f, img});
+    }
+    return figs;
+}
+
+// ---- Build UI ----
+function buildUI(pages, figsByPage) {
+    const pagesDiv = document.getElementById('pages');
+    pagesDiv.innerHTML = '';
+
+    if (pages.length === 0) {
+        pagesDiv.innerHTML = '<p style="text-align:center;color:var(--muted)">未找到任何 page*_full.png 图片。请将本文件放到 figures/ 目录中打开，或调整扫描范围后点击「重新扫描」。</p>';
+        return;
+    }
+
+    // Restore saved data
+    try {
+        const saved = localStorage.getItem(getStorageKey());
+        if (saved) cropData = JSON.parse(saved);
+    } catch(e) {}
+
+    pages.forEach(({num: pg}) => {
+        const figs = figsByPage.get(pg) || [];
+        if (figs.length === 0) return;
+
+        loadedPages.add(pg);
+
+        const container = document.createElement('div');
+        container.className = 'page-container';
+        container.id = `section-page${pg}`;
+
+        const figCards = figs.map(fig => `
+            <div class="fig-card" id="card-${figKey(pg, fig.num)}">
+                <div class="fig-header">
+                    <span class="fig-label">
+                        Fig <input type="number" value="${fig.num}" min="1" max="99"
+                            onchange="renameFig(${pg}, ${fig.num}, this.value)" style="width:50px">
+                    </span>
+                    <button onclick="removeFig(${pg}, ${fig.num})" style="background:transparent;color:#f66;border:1px solid #f66;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:11px">✕</button>
+                </div>
+                <div class="canvas-wrapper" id="wrapper-${figKey(pg, fig.num)}">
+                    <canvas id="canvas-${figKey(pg, fig.num)}"></canvas>
+                    <div class="overlay" id="overlay-${figKey(pg, fig.num)}" style="display:none"></div>
+                </div>
+                <div class="coord-row">
+                    <label>X:</label><input type="number" id="x0-${figKey(pg, fig.num)}" placeholder="48">
+                    <span>–</span><input type="number" id="x1-${figKey(pg, fig.num)}" placeholder="547">
+                    <label>Y:</label><input type="number" id="y0-${figKey(pg, fig.num)}" placeholder="52">
+                    <span>–</span><input type="number" id="y1-${figKey(pg, fig.num)}" placeholder="800">
+                    <span style="font-size:10px;color:var(--muted)">pts</span>
+                    <button onclick="resetFig(${pg}, ${fig.num})">重置</button>
+                    <button onclick="useFullPage(${pg}, ${fig.num})">整页</button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="page-header">
+                <span class="page-title">Page ${pg}</span>
+                <span class="page-hint">${figs.length} 张图</span>
+            </div>
+            <div class="fig-grid">${figCards}</div>
+        `;
+        pagesDiv.appendChild(container);
+
+        // Setup canvases
+        figs.forEach(fig => setupCanvas(pg, fig.num));
+    });
+
+    updateOutput();
+}
+
+function setupCanvas(pg, figNum) {
+    const key = figKey(pg, figNum);
+    const canvas = document.getElementById(`canvas-${key}`);
+    if (!canvas) return;
+
+    const img = new Image();
+    img.onload = function() {
+        const wrapper = document.getElementById(`wrapper-${key}`);
+        const maxWidth = Math.min(550, wrapper.parentElement.clientWidth - 40);
+        const ratio = maxWidth / img.width;
+        canvas.width = maxWidth;
+        canvas.height = img.height * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, maxWidth, img.height * ratio);
+
+        canvas._img = img;
+        canvas._ratio = ratio;
+        canvas._key = key;
+
+        let dragging = false, startX, startY;
+
+        canvas.addEventListener('mousedown', (e) => {
+            dragging = true;
+            const rect = canvas.getBoundingClientRect();
+            startX = (e.clientX - rect.left) / ratio;
+            startY = (e.clientY - rect.top) / ratio;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const rect = canvas.getBoundingClientRect();
+            const curX = (e.clientX - rect.left) / ratio;
+            const curY = (e.clientY - rect.top) / ratio;
+            const x0 = Math.round(Math.min(startX, curX) / SCALE);
+            const y0 = Math.round(Math.min(startY, curY) / SCALE);
+            const x1 = Math.round(Math.max(startX, curX) / SCALE);
+            const y1 = Math.round(Math.max(startY, curY) / SCALE);
+            updateOverlay(key, x0, y0, x1, y1, ratio);
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            dragging = false;
+            const rect = canvas.getBoundingClientRect();
+            const curX = (e.clientX - rect.left) / ratio;
+            const curY = (e.clientY - rect.top) / ratio;
+            const x0 = Math.round(Math.min(startX, curX) / SCALE);
+            const y0 = Math.round(Math.min(startY, curY) / SCALE);
+            const x1 = Math.round(Math.max(startX, curX) / SCALE);
+            const y1 = Math.round(Math.max(startY, curY) / SCALE);
+            setCrop(key, x0, y0, x1, y1);
+        });
+
+        // Restore saved
+        if (cropData[key]) {
+            const c = cropData[key];
+            setCrop(key, c.x0, c.y0, c.x1, c.y1);
+            updateOverlay(key, c.x0, c.y0, c.x1, c.y1, ratio);
+        }
+    };
+    img.src = `page${pg}_full.png`;
+}
+
+// ---- Overlay & crop management ----
+function updateOverlay(key, x0, y0, x1, y1, ratio) {
+    const overlay = document.getElementById(`overlay-${key}`);
+    if (!overlay) return;
+    overlay.style.display = 'block';
+    overlay.style.left = (x0 * SCALE * ratio) + 'px';
+    overlay.style.top = (y0 * SCALE * ratio) + 'px';
+    overlay.style.width = ((x1 - x0) * SCALE * ratio) + 'px';
+    overlay.style.height = ((y1 - y0) * SCALE * ratio) + 'px';
+}
+
+function setCrop(key, x0, y0, x1, y1) {
+    cropData[key] = {x0, y0, x1, y1};
+    const el = (id) => document.getElementById(`${id}-${key}`);
+    ['x0','x1','y0','y1'].forEach((dim, i) => {
+        const e = el(dim);
+        if (e) e.value = [x0,x1,y0,y1][i];
+    });
+    persist();
+}
+
+function resetFig(pg, figNum) {
+    const key = figKey(pg, figNum);
+    delete cropData[key];
+    const overlay = document.getElementById(`overlay-${key}`);
+    if (overlay) overlay.style.display = 'none';
+    ['x0','x1','y0','y1'].forEach(dim => {
+        const e = document.getElementById(`${dim}-${key}`);
+        if (e) e.value = '';
+    });
+    persist();
+}
+
+function removeFig(pg, figNum) {
+    resetFig(pg, figNum);
+    const card = document.getElementById(`card-${figKey(pg, figNum)}`);
+    if (card) card.remove();
+    // Check if page section is now empty
+    const section = document.getElementById(`section-page${pg}`);
+    if (section && section.querySelectorAll('.fig-card').length === 0) {
+        section.remove();
+    }
+    updateOutput();
+}
+
+function renameFig(pg, oldNum, newNum) {
+    if (oldNum === newNum) return;
+    const oldKey = figKey(pg, oldNum);
+    const newKey = figKey(pg, newNum);
+    if (cropData[oldKey]) {
+        cropData[newKey] = cropData[oldKey];
+        delete cropData[oldKey];
+        persist();
+        updateOutput();
+    }
+    // Rebuild the card ID so future lookups work
+    const card = document.getElementById(`card-${oldKey}`);
+    if (card) card.id = `card-${newKey}`;
+}
+
+function useFullPage(pg, figNum) {
+    const key = figKey(pg, figNum);
+    const canvas = document.getElementById(`canvas-${key}`);
+    if (!canvas || !canvas._img) return;
+    const imgH = canvas._img.height;
+    const ratio = canvas._ratio;
+    setCrop(key, MARGIN_X, 52, PW - MARGIN_X, Math.round(imgH / SCALE) - 20);
+    updateOverlay(key, MARGIN_X, 52, PW - MARGIN_X, Math.round(imgH / SCALE) - 20, ratio);
+}
+
+function persist() {
+    try { localStorage.setItem(getStorageKey(), JSON.stringify(cropData)); } catch(e) {}
+}
+
+// ---- Output ----
+function updateOutput() {
+    const keys = Object.keys(cropData).sort();
+    if (keys.length === 0) {
+        document.getElementById('output').textContent = '// 尚未设置任何裁剪区域\n// 在图片上拖拽鼠标框选即可';
+        return;
+    }
+    const lines = ['# 裁剪坐标 — 可直接用于 crop_figure()', 'CROPS = {'];
+    keys.forEach(key => {
+        const c = cropData[key];
+        const m = key.match(/page(\d+)_fig(\d+)/);
+        if (m) {
+            lines.push(`    'fig${m[2]}': (${m[1]}, ${c.y0}, ${c.y1}),  # x: ${c.x0}-${c.x1}`);
+        }
+    });
+    lines.push('}');
+    document.getElementById('output').textContent = lines.join('\n');
+}
+
+function copyCoords() {
+    const text = document.getElementById('output').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const msg = document.getElementById('copyMsg');
+        msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
+    });
+}
+
+function clearAll() {
+    if (!confirm('确定清除所有裁剪数据？')) return;
+    cropData = {};
+    localStorage.removeItem(getStorageKey());
+    document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
+    document.querySelectorAll('.coord-row input[type=number]').forEach(i => i.value = '');
+    updateOutput();
+}
+
+async function loadAll() {
+    const from = parseInt(document.getElementById('pageFrom').value) || 1;
+    const to = parseInt(document.getElementById('pageTo').value) || 50;
+    for (let p = from; p <= to; p++) {
+        if (loadedPages.has(p)) continue;
+        const img = await tryLoadImage(`page${p}_full.png`);
+        if (img) {
+            loadedPages.add(p);
+            // Add a default fig for this page
+            const key = figKey(p, 1);
+            if (!document.getElementById(`canvas-${key}`)) {
+                // Rebuild
+            }
+        }
+    }
+    // Rebuild entire UI
+    await rescan();
+}
+
+async function rescan() {
+    const pFrom = parseInt(document.getElementById('pageFrom').value) || 1;
+    const pTo = parseInt(document.getElementById('pageTo').value) || 50;
+    const fFrom = parseInt(document.getElementById('figFrom').value) || 1;
+    const fTo = parseInt(document.getElementById('figTo').value) || 10;
+
+    const pages = await detectPages(pFrom, pTo);
+
+    // For each page, see which fig crops exist, or create a default entry
+    const figsByPage = new Map();
+    for (const {num: pg} of pages) {
+        // Check for existing crop files
+        let figs = await detectFigs(pg, fFrom, fTo);
+        // Also check if there are any cropData entries for this page
+        const existingCrops = Object.keys(cropData)
+            .filter(k => k.startsWith(`page${pg}_`))
+            .map(k => {
+                const m = k.match(/page\d+_fig(\d+)/);
+                return m ? parseInt(m[1]) : null;
+            })
+            .filter(Boolean);
+
+        // Merge: start with detected crops, add any saved ones
+        const allNums = new Set([...figs.map(f => f.num), ...existingCrops]);
+        if (allNums.size === 0 && pages.length <= 15) {
+            // For papers with few pages, add a default entry for each page
+            allNums.add(1); // at least one figure per page
+        }
+        if (allNums.size > 0) {
+            figsByPage.set(pg, [...allNums].sort().map(n => ({num: n})));
+        }
+    }
+
+    buildUI(pages, figsByPage);
+    updateOutput();
+}
+
+// ---- Init ----
+window.addEventListener('DOMContentLoaded', () => rescan());
+</script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片裁剪工具 - DSpark Figures</title>
+<style>
+body { font-family: -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #1a1a2e; color: #eee; }
+h1 { text-align: center; color: #667eea; }
+.page-container { background: #16213e; border-radius: 8px; padding: 15px; margin: 20px 0; }
+.page-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #e94560; }
+.fig-row { display: flex; gap: 20px; margin: 10px 0; flex-wrap: wrap; }
+.fig-item { background: #0f3460; border-radius: 8px; padding: 10px; }
+.fig-label { font-weight: bold; margin-bottom: 5px; }
+.canvas-wrapper { position: relative; display: inline-block; cursor: crosshair; border: 1px solid #333; }
+canvas { display: block; max-width: 500px; height: auto; }
+.overlay { position: absolute; border: 2px dashed #00ff88; background: rgba(0,255,136,0.1); pointer-events: none; }
+.controls { margin-top: 8px; font-size: 13px; }
+.controls input { width: 60px; background: #1a1a2e; color: #eee; border: 1px solid #555; padding: 3px 6px; border-radius: 4px; }
+.controls button { background: #667eea; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; margin: 2px; }
+.controls button:hover { background: #764ba2; }
+.coords { color: #00ff88; font-family: monospace; }
+.output { background: #0f3460; border-radius: 8px; padding: 15px; margin: 20px 0; }
+.output pre { background: #1a1a2e; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>DSpark 图片裁剪工具</h1>
+<p style="text-align:center;color:#aaa">拖拽鼠标选择裁剪区域 | 点击 <b>更新裁剪</b> 预览 | 点击 <b>复制坐标</b> 导出</p>
+<div id="pages"></div>
+<div class="output">
+<h3>当前裁剪坐标 (Python dict)</h3>
+<pre id="output"></pre>
+<button onclick="copyCoords()" style="background:#e94560;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:14px;">复制坐标</button>
+</div>
+
+<script>
+const SCALE = 2;
+const PW = 595; // page width in pts
+
+// Figure configurations - pages that need cropping
+const FIGURES = [
+    {name:'fig1', page:5,  label:'Figure 1: DSpark 架构图'},
+    {name:'fig2', page:12, label:'Figure 2: 位置条件接受率'},
+    {name:'fig3', page:13, label:'Figure 3: 草稿深度影响'},
+    {name:'fig4', page:13, label:'Figure 4: 建议长度和延迟'},
+    {name:'fig5', page:15, label:'Figure 5: 置信度阈值扫描'},
+    {name:'fig6', page:15, label:'Figure 6: 可靠性图'},
+    {name:'fig7', page:18, label:'Figure 7: 吞吐量 vs TPS'},
+    {name:'fig8', page:19, label:'Figure 8: 负载自适应'},
+];
+
+let cropData = {};
+
+function init() {
+    const pagesDiv = document.getElementById('pages');
+
+    // Group figures by page
+    const byPage = {};
+    FIGURES.forEach(f => {
+        if (!byPage[f.page]) byPage[f.page] = [];
+        byPage[f.page].push(f);
+    });
+
+    // Load crop data from localStorage if available
+    try {
+        const saved = localStorage.getItem('dspark_crops');
+        if (saved) cropData = JSON.parse(saved);
+    } catch(e) {}
+
+    // Create UI for each page
+    for (const [pgNum, figs] of Object.entries(byPage)) {
+        const container = document.createElement('div');
+        container.className = 'page-container';
+        container.innerHTML = `<div class="page-title">Page ${pgNum}</div><div class="fig-row" id="row-${pgNum}"></div>`;
+        pagesDiv.appendChild(container);
+
+        const row = document.getElementById(`row-${pgNum}`);
+
+        figs.forEach(fig => {
+            const item = document.createElement('div');
+            item.className = 'fig-item';
+            item.innerHTML = `
+                <div class="fig-label">${fig.label} (${fig.name})</div>
+                <div class="canvas-wrapper" id="wrapper-${fig.name}">
+                    <canvas id="canvas-${fig.name}"></canvas>
+                    <div class="overlay" id="overlay-${fig.name}" style="display:none"></div>
+                </div>
+                <div class="controls">
+                    X: <input type="number" id="x0-${fig.name}" size="4"> -
+                    <input type="number" id="x1-${fig.name}" size="4"> |
+                    Y: <input type="number" id="y0-${fig.name}" size="4"> -
+                    <input type="number" id="y1-${fig.name}" size="4"> pts
+                    <button onclick="resetCrop('${fig.name}')">重置</button>
+                    <button onclick="useFullPage('${fig.name}')">整页</button>
+                </div>
+            `;
+            row.appendChild(item);
+
+            // Load image
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.getElementById(`canvas-${fig.name}`);
+                const wrapper = document.getElementById(`wrapper-${fig.name}`);
+                const displayWidth = 500;
+                const ratio = displayWidth / img.width;
+                canvas.width = displayWidth;
+                canvas.height = img.height * ratio;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, displayWidth, img.height * ratio);
+
+                // Store image data for mouse handling
+                canvas._img = img;
+                canvas._ratio = ratio;
+                canvas._figName = fig.name;
+
+                // Mouse handlers
+                let dragging = false;
+                let startX, startY;
+
+                canvas.addEventListener('mousedown', (e) => {
+                    dragging = true;
+                    const rect = canvas.getBoundingClientRect();
+                    startX = (e.clientX - rect.left) / ratio;
+                    startY = (e.clientY - rect.top) / ratio;
+                });
+
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const curX = (e.clientX - rect.left) / ratio;
+                    const curY = (e.clientY - rect.top) / ratio;
+
+                    const x0 = Math.round(Math.min(startX, curX) / SCALE);
+                    const y0 = Math.round(Math.min(startY, curY) / SCALE);
+                    const x1 = Math.round(Math.max(startX, curX) / SCALE);
+                    const y1 = Math.round(Math.max(startY, curY) / SCALE);
+
+                    updateOverlay(fig.name, x0, y0, x1, y1, ratio, img.width, img.height);
+                });
+
+                canvas.addEventListener('mouseup', (e) => {
+                    dragging = false;
+                    const rect = canvas.getBoundingClientRect();
+                    const curX = (e.clientX - rect.left) / ratio;
+                    const curY = (e.clientY - rect.top) / ratio;
+
+                    const x0 = Math.round(Math.min(startX, curX) / SCALE);
+                    const y0 = Math.round(Math.min(startY, curY) / SCALE);
+                    const x1 = Math.round(Math.max(startX, curX) / SCALE);
+                    const y1 = Math.round(Math.max(startY, curY) / SCALE);
+
+                    setCrop(fig.name, x0, y0, x1, y1);
+                });
+
+                // Restore saved crop
+                if (cropData[fig.name]) {
+                    const c = cropData[fig.name];
+                    setCrop(fig.name, c.x0, c.y0, c.x1, c.y1);
+                    updateOverlay(fig.name, c.x0, c.y0, c.x1, c.y1, ratio, img.width, img.height);
+                }
+            };
+            img.src = `page${fig.page}_full.png`;
+        });
+    }
+
+    updateOutput();
+}
+
+function updateOverlay(name, x0, y0, x1, y1, ratio, imgW, imgH) {
+    const overlay = document.getElementById(`overlay-${name}`);
+    overlay.style.display = 'block';
+    overlay.style.left = (x0 * SCALE * ratio) + 'px';
+    overlay.style.top = (y0 * SCALE * ratio) + 'px';
+    overlay.style.width = ((x1 - x0) * SCALE * ratio) + 'px';
+    overlay.style.height = ((y1 - y0) * SCALE * ratio) + 'px';
+}
+
+function setCrop(name, x0, y0, x1, y1) {
+    cropData[name] = {x0, y0, x1, y1};
+    document.getElementById(`x0-${name}`).value = x0;
+    document.getElementById(`x1-${name}`).value = x1;
+    document.getElementById(`y0-${name}`).value = y0;
+    document.getElementById(`y1-${name}`).value = y1;
+
+    try { localStorage.setItem('dspark_crops', JSON.stringify(cropData)); } catch(e) {}
+    updateOutput();
+}
+
+function resetCrop(name) {
+    delete cropData[name];
+    document.getElementById(`overlay-${name}`).style.display = 'none';
+    document.getElementById(`x0-${name}`).value = '';
+    document.getElementById(`x1-${name}`).value = '';
+    document.getElementById(`y0-${name}`).value = '';
+    document.getElementById(`y1-${name}`).value = '';
+    try { localStorage.setItem('dspark_crops', JSON.stringify(cropData)); } catch(e) {}
+    updateOutput();
+}
+
+function useFullPage(name) {
+    const fig = FIGURES.find(f => f.name === name);
+    const canvas = document.getElementById(`canvas-${name}`);
+    if (!canvas || !canvas._img) return;
+    const imgW = canvas._img.width;
+    const imgH = canvas._img.height;
+    const ratio = canvas._ratio;
+    setCrop(name, 48, 50, PW - 48, Math.round(imgH / SCALE) - 20);
+    updateOverlay(name, 48, 50, PW - 48, Math.round(imgH / SCALE) - 20, ratio, imgW, imgH);
+}
+
+function updateOutput() {
+    const lines = ['CROPS = {'];
+    FIGURES.forEach(f => {
+        if (cropData[f.name]) {
+            const c = cropData[f.name];
+            lines.push(`    '${f.name}': (${f.page}, ${c.y0}, ${c.y1}),  # ${f.label}`);
+        }
+    });
+    lines.push('}');
+    document.getElementById('output').textContent = lines.join('\n');
+}
+
+function copyCoords() {
+    const text = document.getElementById('output').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('坐标已复制到剪贴板！发送给我即可应用。');
+    });
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
