@@ -1,4 +1,4 @@
-#include "reduce.cuh"
+#include "reduce/reduce.cuh"
 #include <algorithm>
 #include <cstring>
 #include <cuda_runtime_api.h>

@@ -23,7 +23,7 @@ run_ctest() {
         echo "==================="
 
         # 核心测试命令
-        ctest --output-on-failure --rerun-failed  --verbose
+        GTEST_COLOR=yes ctest --output-on-failure --rerun-failed --verbose
         exit_code=$?
         echo "测试退出码: $exit_code"
     } | tee "$file"   # 同时输出到终端和文件
