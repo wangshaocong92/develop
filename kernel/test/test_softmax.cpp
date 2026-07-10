@@ -166,7 +166,7 @@ TEST(OnlineSoftmaxForward, Large) {
     std::vector<float> expected(n);
 
     auto t0 = std::chrono::high_resolution_clock::now();
-    DA(input.data(), expected.data(), n);
+    reference_softmax(input.data(), expected.data(), n);
     auto t1 = std::chrono::high_resolution_clock::now();
 
     kernel::cpu::online_softmax_forward(input.data(), n);

@@ -8,6 +8,7 @@
 namespace kernel {
 namespace cpu
 {
+    
     void softmax_forward(float* input, const int seqlen)
     {
         /// 求最大值
