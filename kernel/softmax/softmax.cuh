@@ -4,8 +4,6 @@
 #include <vector>
 #include <cuda_runtime_api.h>
 #include <cub/cub.cuh>
-#include <cooperative_groups.h>
-namespace cg = cooperative_groups;
 namespace kernel {
     namespace gpu {
         /*
@@ -52,7 +50,7 @@ namespace kernel {
             // 加载 + 线程内归约合并
             int idx = global_index;
             float val = (idx < N) ? input[idx] : 0.0f;
-            float thread_sum = 0.0;
+            float thread_sum = (idx < N) ? expf(val - max) : 0.0f;
             #pragma unroll
             for (int i = 1; i < ITEMS_PER_THREAD; ++i) {
                 idx += BLOCK_THREADS; // 跨步访问，合并内存读取
@@ -105,58 +103,45 @@ namespace kernel {
 
 
           template <int BLOCK_THREADS, int ITEMS_PER_THREAD>
-        __global__ void softmax_max_sum(float *input, float *d_max, float *d_sum, int N) {
-            cg::grid_group grid = cg::this_grid();
+        __global__ void softmax_max_sum(const float *input, float *d_max, float *d_sum, int N) {
+            constexpr int CHUNK = BLOCK_THREADS * ITEMS_PER_THREAD;
             using BlockReduce = cub::BlockReduce<float, BLOCK_THREADS>;
             __shared__ typename BlockReduce::TempStorage temp_storage;
+            __shared__ float smem[CHUNK];
             const int tid = threadIdx.x;
-            const int global_index = blockIdx.x * BLOCK_THREADS * ITEMS_PER_THREAD + tid;
+            const int base = blockIdx.x * CHUNK;
 
-            // 加载 + 线程内归约合并
-            int idx = global_index;
-            float val = (idx < N) ? input[idx] : 0.0f;
+            // ---- 一次 global load → SMEM (coalesced) ----
+            int idx = base + tid;
+            #pragma unroll
+            for (int i = 0; i < ITEMS_PER_THREAD; ++i) {
+                smem[tid + i * BLOCK_THREADS] = (idx < N) ? input[idx] : 0.0f;
+                idx += BLOCK_THREADS;
+            }
+            __syncthreads();
+
+            // ---- max (from SMEM) ----
+            float val = smem[tid];
             float thread_max = val;
             #pragma unroll
             for (int i = 1; i < ITEMS_PER_THREAD; ++i) {
-                idx += BLOCK_THREADS; // 跨步访问，合并内存读取
-                val = (idx < N) ? input[idx] : 0.0f;
+                val = smem[tid + i * BLOCK_THREADS];
                 thread_max = fmaxf(thread_max, val);
             }
-            // block 内归约
             float block_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
 
-            // 计算 sum
+            // ---- sum (from SMEM) ----
             float thread_sum = 0.0f;
-            idx = global_index;
             #pragma unroll
             for (int i = 0; i < ITEMS_PER_THREAD; ++i) {
-                val = (idx < N) ? input[idx] : 0.0f;
-                thread_sum += (idx < N) ? expf(val - block_max) : 0.0f;
-                idx += BLOCK_THREADS; // 跨步访问，合并内存读取
+                val = smem[tid + i * BLOCK_THREADS];
+                thread_sum += expf(val - block_max);
             }
             float block_sum = BlockReduce(temp_storage).Sum(thread_sum);
 
-            if (threadIdx.x == 0) {
-                d_max[blockIdx.x] = block_max; // 写入全局内存
-                d_sum[blockIdx.x] = block_sum; // 写入全局内存
-            }
-
-            grid.sync();  // ← 所有 block 在此等待，确保 gmax 是最终值
-            double sum = 0.0;
-            float final_max = -std::numeric_limits<float>::infinity();
-            if (blockIdx.x == 0 && threadIdx.x == 0) {   
-                for (int i = 0; i < gridDim.x; ++i) {
-                    final_max = fmaxf(final_max, d_max[i]);
-                }
-                for(auto i = 0; i < gridDim.x; ++i){
-                    sum += d_sum[i] * expf(d_max[i] - final_max);
-                }
-            }
-            grid.sync();  // ← 所有 block 在此等待，确保 gmax 是最终值
-            #pragma unroll
-            for (int i = 0; i < ITEMS_PER_THREAD; ++i) {
-                input[idx] = (idx < N) ? expf(input[idx] - max) / sum : 0.0f;
-                idx += BLOCK_THREADS; // 跨步访问，合并内存读取
+            if (tid == 0) {
+                d_max[blockIdx.x] = block_max;
+                d_sum[blockIdx.x] = block_sum;
             }
         }
 
