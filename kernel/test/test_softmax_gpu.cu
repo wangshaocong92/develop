@@ -1,7 +1,8 @@
 /******************************************************************************
  * kernel/softmax/softmax.cuh GPU 单元测试
  *
- * 测试 kernel::gpu::softmax_max 和 softmax_sum
+ * 测试: softmax_max / softmax_sum / softmax_forward
+ *       host_softmax_forward / host_online_softmax_forward
  ******************************************************************************/
 
 #include <cmath>
@@ -20,58 +21,183 @@ using namespace kernel::gpu;
 #define CUDA_CHECK(call) \
     ASSERT_EQ(call, cudaSuccess) << cudaGetErrorString(call)
 
-static float max_abs_diff(const float *a, const float *b, int n) {
-    float m = 0.f;
-    for (int i = 0; i < n; ++i) {
-        float d = std::fabs(a[i] - b[i]);
-        if (d > m) m = d;
-    }
+constexpr int BLK = 256;
+constexpr int ITM = 4;
+constexpr int CHK = BLK * ITM;
+
+// ==========================================================================
+// CPU 参照
+// ==========================================================================
+static float cpu_max(const float *x, int n) {
+    float m = -INFINITY;
+    for (int i = 0; i < n; ++i) m = fmaxf(m, x[i]);
     return m;
 }
 
-template <int N, int BLOCK_THREADS, int ITEMS_PER_THREAD>
-static void run_softmax_max_test() {
-    const int ITEMS_PER_BLOCK = BLOCK_THREADS * ITEMS_PER_THREAD;
-    const int NUM_BLOCKS = (N + ITEMS_PER_BLOCK - 1) / ITEMS_PER_BLOCK;
-
-    std::vector<float> h_input(N);
-    std::mt19937 gen(42);
-    std::uniform_real_distribution<float> dis(1.f, 10.f);
-    for (auto &v : h_input) v = dis(gen);
-
-    float *d_input = nullptr, *d_max = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_input, N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&d_max, NUM_BLOCKS * sizeof(float)));
-    CUDA_CHECK(cudaMemcpy(d_input, h_input.data(), N * sizeof(float), cudaMemcpyHostToDevice));
-
-    softmax_max<BLOCK_THREADS, ITEMS_PER_THREAD>
-        <<<NUM_BLOCKS, BLOCK_THREADS>>>(d_input, d_max, N);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    std::vector<float> h_max(NUM_BLOCKS);
-    CUDA_CHECK(cudaMemcpy(h_max.data(), d_max, NUM_BLOCKS * sizeof(float), cudaMemcpyDeviceToHost));
-
-    // CPU ref
-    std::vector<float> ref(NUM_BLOCKS, -std::numeric_limits<float>::infinity());
-    for (int b = 0; b < NUM_BLOCKS; ++b) {
-        int start = b * ITEMS_PER_BLOCK;
-        int end   = std::min(start + ITEMS_PER_BLOCK, N);
-        for (int idx = start; idx < end; ++idx)
-            ref[b] = std::max(ref[b], h_input[idx]);
-    }
-
-    float diff = max_abs_diff(h_max.data(), ref.data(), NUM_BLOCKS);
-    std::cout << "   N=" << N << " BLK=" << BLOCK_THREADS
-              << " I=" << ITEMS_PER_THREAD << " max_diff=" << diff << std::endl;
-    EXPECT_LT(diff, 1e-4f);
-
-    CUDA_CHECK(cudaFree(d_input));
-    CUDA_CHECK(cudaFree(d_max));
+static std::vector<float> cpu_softmax(const float *x, int n) {
+    float m = cpu_max(x, n);
+    std::vector<float> out(n);
+    double sum = 0.0;
+    for (int i = 0; i < n; ++i) { out[i] = expf(x[i] - m); sum += out[i]; }
+    for (auto &v : out) v = static_cast<float>(v / sum);
+    return out;
 }
 
-TEST(SoftmaxMax, N1024_B128_I4)   { run_softmax_max_test<1024, 128, 4>(); }
-TEST(SoftmaxMax, N1024_B256_I4)   { run_softmax_max_test<1024, 256, 4>(); }
-TEST(SoftmaxMax, N1024_B128_I8)   { run_softmax_max_test<1024, 128, 8>(); }
-TEST(SoftmaxMax, N5000_B128_I4)   { run_softmax_max_test<5000, 128, 4>(); }
-TEST(SoftmaxMax, N1_B128_I4)      { run_softmax_max_test<1,    128, 4>(); }
+static std::vector<float> make_data(int n, float lo = 1.f, float hi = 10.f) {
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> dis(lo, hi);
+    std::vector<float> v(n);
+    for (auto &x : v) x = dis(rng);
+    return v;
+}
+
+static float max_abs_diff(const float *a, const float *b, int n) {
+    float m = 0.f;
+    for (int i = 0; i < n; ++i) m = fmaxf(m, fabsf(a[i] - b[i]));
+    return m;
+}
+
+// ==========================================================================
+// 1. softmax_max
+// ==========================================================================
+template <int N, int BT, int IT>
+static void test_softmax_max() {
+    int nb = (N + BT * IT - 1) / (BT * IT);
+    auto h_in = make_data(N);
+    float *d_in, *d_max;
+    CUDA_CHECK(cudaMalloc(&d_in, N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_max, nb * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d_in, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+
+    softmax_max<BT, IT><<<nb, BT>>>(d_in, d_max, N);
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<float> got(nb);
+    CUDA_CHECK(cudaMemcpy(got.data(), d_max, nb * sizeof(float), cudaMemcpyDeviceToHost));
+
+    std::vector<float> ref(nb);
+    for (int b = 0; b < nb; ++b) {
+        int s = b * BT * IT, e = std::min(s + BT * IT, N);
+        ref[b] = -INFINITY;
+        for (int i = s; i < e; ++i) ref[b] = fmaxf(ref[b], h_in[i]);
+    }
+    EXPECT_LT(max_abs_diff(got.data(), ref.data(), nb), 1e-4f);
+    CUDA_CHECK(cudaFree(d_in)); CUDA_CHECK(cudaFree(d_max));
+}
+
+TEST(SoftmaxMax, N1024_B128_I4)  { test_softmax_max<1024, 128, 4>(); }
+TEST(SoftmaxMax, N1024_B256_I4)  { test_softmax_max<1024, 256, 4>(); }
+TEST(SoftmaxMax, N5000_B128_I4)  { test_softmax_max<5000, 128, 4>(); }
+TEST(SoftmaxMax, N1_B128_I4)     { test_softmax_max<1,    128, 4>(); }
+
+// ==========================================================================
+// 2. softmax_sum
+// ==========================================================================
+template <int N, int BT, int IT>
+static void test_softmax_sum() {
+    int cb = BT * IT, nb = (N + cb - 1) / cb;
+    auto h_in = make_data(N);
+    float gmax = cpu_max(h_in.data(), N);
+
+    float *d_in, *d_sum;
+    CUDA_CHECK(cudaMalloc(&d_in, N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_sum, nb * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d_in, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+
+    softmax_sum<BT, IT><<<nb, BT>>>(d_in, d_sum, static_cast<double>(gmax), N);
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<float> got(nb);
+    CUDA_CHECK(cudaMemcpy(got.data(), d_sum, nb * sizeof(float), cudaMemcpyDeviceToHost));
+
+    std::vector<float> ref(nb);
+    for (int b = 0; b < nb; ++b) {
+        int s = b * cb, e = std::min(s + cb, N);
+        double sum = 0.0;
+        for (int i = s; i < e; ++i) sum += expf(h_in[i] - gmax);
+        ref[b] = static_cast<float>(sum);
+    }
+    EXPECT_LT(max_abs_diff(got.data(), ref.data(), nb), 1e-2f);
+    CUDA_CHECK(cudaFree(d_in)); CUDA_CHECK(cudaFree(d_sum));
+}
+
+TEST(SoftmaxSum, N1024_B128_I4)  { test_softmax_sum<1024, 128, 4>(); }
+TEST(SoftmaxSum, N1024_B256_I4)  { test_softmax_sum<1024, 256, 4>(); }
+TEST(SoftmaxSum, N5000_B128_I4)  { test_softmax_sum<5000, 128, 4>(); }
+
+// ==========================================================================
+// 3. softmax_forward (normalize)
+// ==========================================================================
+template <int N, int BT, int IT>
+static void test_softmax_forward() {
+    auto h_in = make_data(N);
+    float gmax = cpu_max(h_in.data(), N);
+    double gsum = 0.0;
+    for (int i = 0; i < N; ++i) gsum += expf(h_in[i] - gmax);
+
+    float *d_in;
+    CUDA_CHECK(cudaMalloc(&d_in, N * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d_in, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+
+    int nb = (N + BT * IT - 1) / (BT * IT);
+    softmax_forward<BT, IT><<<nb, BT>>>(d_in, gsum, static_cast<double>(gmax), N);
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<float> got(N);
+    CUDA_CHECK(cudaMemcpy(got.data(), d_in, N * sizeof(float), cudaMemcpyDeviceToHost));
+
+    auto ref = cpu_softmax(h_in.data(), N);
+    EXPECT_LT(max_abs_diff(got.data(), ref.data(), N), 1e-4f);
+    CUDA_CHECK(cudaFree(d_in));
+}
+
+TEST(SoftmaxFwd, N1024_B128_I4)  { test_softmax_forward<1024, 128, 4>(); }
+TEST(SoftmaxFwd, N5000_B128_I4)  { test_softmax_forward<5000, 128, 4>(); }
+
+// ==========================================================================
+// 4. host_softmax_forward (3-pass, 端到端)
+// ==========================================================================
+static void test_host_fwd(int n) {
+    auto h_in = make_data(n, -5.f, 5.f);
+    auto ref = cpu_softmax(h_in.data(), n);
+
+    float *d = nullptr;
+    CUDA_CHECK(cudaMalloc(&d, n * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d, h_in.data(), n * sizeof(float), cudaMemcpyHostToDevice));
+    host_softmax_forward(d, n);
+    std::vector<float> got(n);
+    CUDA_CHECK(cudaMemcpy(got.data(), d, n * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d));
+
+    float err = max_abs_diff(got.data(), ref.data(), n);
+    std::cout << "  host_3pass_err=" << err << std::endl;
+    EXPECT_LT(err, 1e-2f);
+}
+
+TEST(HostSoftmaxFwd, N1024)  { test_host_fwd(1024); }
+TEST(HostSoftmaxFwd, N5000)  { test_host_fwd(5000); }
+TEST(HostSoftmaxFwd, N12345) { test_host_fwd(12345); }
+
+// ==========================================================================
+// 5. host_online_softmax_forward (2-pass, 端到端)
+// ==========================================================================
+static void test_host_online(int n) {
+    auto h_in = make_data(n, -5.f, 5.f);
+    auto ref = cpu_softmax(h_in.data(), n);
+
+    float *d = nullptr;
+    CUDA_CHECK(cudaMalloc(&d, n * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d, h_in.data(), n * sizeof(float), cudaMemcpyHostToDevice));
+    host_online_softmax_forward(d, n);
+    std::vector<float> got(n);
+    CUDA_CHECK(cudaMemcpy(got.data(), d, n * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d));
+
+    float err = max_abs_diff(got.data(), ref.data(), n);
+    std::cout << "  host_2pass_err=" << err << std::endl;
+    EXPECT_LT(err, 1e-2f);
+}
+
+TEST(HostOnlineSoftmaxFwd, N1024)  { test_host_online(1024); }
+TEST(HostOnlineSoftmaxFwd, N5000)  { test_host_online(5000); }
+TEST(HostOnlineSoftmaxFwd, N12345) { test_host_online(12345); }

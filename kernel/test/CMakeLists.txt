@@ -44,6 +44,10 @@ set_target_properties(softmax_gpu_test PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
+target_compile_options(softmax_gpu_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
 # ---- softmax benchmark (无 GTest, 直接跑) ----
 add_executable(softmax_bench
     bench_softmax.cu

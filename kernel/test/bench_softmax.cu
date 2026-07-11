@@ -14,18 +14,6 @@
 #include "softmax/softmax.h"
 #include "softmax/softmax.cuh"
 
-constexpr int BLK = 256;
-constexpr int ITM = 4;
-constexpr int CHK = BLK * ITM;  // 1024
-
-static void launch_online(float *d_in, float *d_max, float *d_sum, int n) {
-    int nb = (n + CHK - 1) / CHK;
-    void *args[] = {&d_in, &d_max, &d_sum, &n};
-    cudaLaunchCooperativeKernel(
-        (void*)kernel::gpu::online_softmax_forward<BLK, ITM>,
-        dim3(nb), dim3(BLK), args);
-}
-
 static std::vector<float> make_data(int n) {
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> dis(-5.f, 5.f);
@@ -46,17 +34,29 @@ static std::vector<float> make_data(int n) {
                   << std::setprecision(3) << ms << " ms" << std::endl;         \
     } while (0)
 
+static void gpu_3pass(const float *src, int n) {
+    float *d = nullptr;
+    cudaMalloc(&d, n * sizeof(float));
+    cudaMemcpy(d, src, n * sizeof(float), cudaMemcpyHostToDevice);
+    kernel::gpu::host_softmax_forward(d, n);
+    cudaMemcpy(const_cast<float*>(src), d, n * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d);
+}
+
+static void gpu_2pass(const float *src, int n) {
+    float *d = nullptr;
+    cudaMalloc(&d, n * sizeof(float));
+    cudaMemcpy(d, src, n * sizeof(float), cudaMemcpyHostToDevice);
+    kernel::gpu::host_online_softmax_forward(d, n);
+    cudaMemcpy(const_cast<float*>(src), d, n * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d);
+}
+
 int main() {
     // 预热
     std::vector<float> warm(1024);
-    float *d = nullptr, *dm = nullptr, *ds = nullptr;
-    cudaMalloc(&d, 1024 * sizeof(float));
-    cudaMalloc(&dm, sizeof(float));
-    cudaMalloc(&ds, sizeof(float));
-    cudaMemcpy(d, warm.data(), 1024 * sizeof(float), cudaMemcpyHostToDevice);
-    kernel::gpu::host_softmax_forward(d, 1024);
-    launch_online(d, dm, ds, 1024);
-    cudaFree(d); cudaFree(dm); cudaFree(ds);
+    gpu_3pass(warm.data(), 1024);
+    gpu_2pass(warm.data(), 1024);
 
     const int sizes[] = {4096, 65536, 262144, 1048576, 4194304, 16777216};
     std::cout << "===== CPU vs GPU softmax =====\n";
@@ -65,7 +65,7 @@ int main() {
         std::cout << "\n--- N = " << n << " ---" << std::endl;
 
         auto base = make_data(n);
-        std::vector<float> input = base;
+        auto input = base;
 
         TIME("cpu softmax_forward",
              ([&] { kernel::cpu::softmax_forward(input.data(), n); }));
@@ -74,32 +74,13 @@ int main() {
         TIME("cpu online_softmax_forward",
              ([&] { kernel::cpu::online_softmax_forward(input.data(), n); }));
 
-        // GPU: 3-pass
         input = base;
         TIME("gpu softmax (3-pass)",
-             ([&] {
-                 float *d_in = nullptr;
-                 cudaMalloc(&d_in, n * sizeof(float));
-                 cudaMemcpy(d_in, input.data(), n * sizeof(float), cudaMemcpyHostToDevice);
-                 kernel::gpu::host_softmax_forward(d_in, n);
-                 cudaMemcpy(input.data(), d_in, n * sizeof(float), cudaMemcpyDeviceToHost);
-                 cudaFree(d_in);
-             }));
+             ([&] { gpu_3pass(input.data(), n); }));
 
-        // GPU: online (cooperative, grid sync)
         input = base;
-        TIME("gpu softmax (online)",
-             ([&] {
-                 int nb = (n + CHK - 1) / CHK;
-                 float *d_in = nullptr, *d_m = nullptr, *d_s = nullptr;
-                 cudaMalloc(&d_in, n * sizeof(float));
-                 cudaMalloc(&d_m, nb * sizeof(float));
-                 cudaMalloc(&d_s, nb * sizeof(float));
-                 cudaMemcpy(d_in, input.data(), n * sizeof(float), cudaMemcpyHostToDevice);
-                 launch_online(d_in, d_m, d_s, n);
-                 cudaMemcpy(input.data(), d_in, n * sizeof(float), cudaMemcpyDeviceToHost);
-                 cudaFree(d_in); cudaFree(d_m); cudaFree(d_s);
-             }));
+        TIME("gpu softmax (2-pass)",
+             ([&] { gpu_2pass(input.data(), n); }));
     }
     return 0;
 }

@@ -105,7 +105,7 @@ namespace kernel {
 
 
           template <int BLOCK_THREADS, int ITEMS_PER_THREAD>
-        __global__ void online_softmax_forward(float *input, float *d_max, float *d_sum, int N) {
+        __global__ void softmax_max_sum(float *input, float *d_max, float *d_sum, int N) {
             cg::grid_group grid = cg::this_grid();
             using BlockReduce = cub::BlockReduce<float, BLOCK_THREADS>;
             __shared__ typename BlockReduce::TempStorage temp_storage;
@@ -155,9 +155,33 @@ namespace kernel {
             grid.sync();  // ← 所有 block 在此等待，确保 gmax 是最终值
             #pragma unroll
             for (int i = 0; i < ITEMS_PER_THREAD; ++i) {
-                input[idx] = (idx < N) ? expf(input[idx] - final_max) / sum : 0.0f;
+                input[idx] = (idx < N) ? expf(input[idx] - max) / sum : 0.0f;
                 idx += BLOCK_THREADS; // 跨步访问，合并内存读取
             }
+        }
+
+        inline void host_online_softmax_forward(float *input, int n){
+            constexpr int BLOCK_THREADS = 256;
+            constexpr int ITEMS_PER_THREAD = 4;
+            const int ITEMS_PER_BLOCK = BLOCK_THREADS * ITEMS_PER_THREAD;
+            const int NUM_BLOCKS = (n + ITEMS_PER_BLOCK - 1) / ITEMS_PER_BLOCK;
+            std::vector<float> h_max(NUM_BLOCKS);
+            std::vector<float> h_sum(NUM_BLOCKS);
+            float *d_max = nullptr;
+            float *d_sum = nullptr;
+            cudaMalloc(&d_max, NUM_BLOCKS * sizeof(float));
+            cudaMalloc(&d_sum, NUM_BLOCKS * sizeof(float));
+            softmax_max_sum<BLOCK_THREADS, ITEMS_PER_THREAD><<<NUM_BLOCKS, BLOCK_THREADS>>>(input, d_max, d_sum, n);
+            cudaMemcpy(h_max.data(), d_max, NUM_BLOCKS * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(h_sum.data(), d_sum, NUM_BLOCKS * sizeof(float), cudaMemcpyDeviceToHost);
+            float max = *std::max_element(h_max.begin(), h_max.end());
+            double sum = 0.0;
+            for(auto i = 0; i < NUM_BLOCKS; ++i){
+                sum += h_sum[i] * expf(h_max[i] - max);
+            }
+            softmax_forward<BLOCK_THREADS, ITEMS_PER_THREAD><<<NUM_BLOCKS, BLOCK_THREADS>>>(input, sum, max, n);
+            cudaFree(d_max);
+            cudaFree(d_sum);    
         }
 
     } // namespace gpu
