@@ -69,7 +69,11 @@ static void test_softmax_max() {
     CUDA_CHECK(cudaMalloc(&d_max, nb * sizeof(float)));
     CUDA_CHECK(cudaMemcpy(d_in, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
 
-    softmax_max<BT, IT><<<nb, BT>>>(d_in, d_max, N);
+    // M=1 的 2D tensor（行主序），降维当作一维用
+    auto layout = cute::Layout<cute::Shape<cute::Int<1>, cute::Int<N>>,
+                               cute::Stride<cute::Int<N>, cute::Int<1>>>{};
+    auto t = cute::make_tensor(d_in, layout);
+    softmax_max<BT, IT, 1, N><<<nb, BT>>>(t, d_max);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     std::vector<float> got(nb);
@@ -99,12 +103,18 @@ static void test_softmax_sum() {
     auto h_in = make_data(N);
     float gmax = cpu_max(h_in.data(), N);
 
-    float *d_in, *d_sum;
+    float *d_in, *d_sum, *d_max;
     CUDA_CHECK(cudaMalloc(&d_in, N * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&d_sum, nb * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_max, sizeof(float)));  // M=1 的逐行 max
     CUDA_CHECK(cudaMemcpy(d_in, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_max, &gmax, sizeof(float), cudaMemcpyHostToDevice));
 
-    softmax_sum<BT, IT><<<nb, BT>>>(d_in, d_sum, static_cast<double>(gmax), N);
+    // M=1 的 2D tensor（行主序），降维当作一维用
+    auto layout = cute::Layout<cute::Shape<cute::Int<1>, cute::Int<N>>,
+                               cute::Stride<cute::Int<N>, cute::Int<1>>>{};
+    auto t = cute::make_tensor(d_in, layout);
+    softmax_sum<BT, IT, 1, N><<<nb, BT>>>(t, d_sum, d_max);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     std::vector<float> got(nb);
@@ -118,7 +128,7 @@ static void test_softmax_sum() {
         ref[b] = static_cast<float>(sum);
     }
     EXPECT_LT(max_abs_diff(got.data(), ref.data(), nb), 1e-2f);
-    CUDA_CHECK(cudaFree(d_in)); CUDA_CHECK(cudaFree(d_sum));
+    CUDA_CHECK(cudaFree(d_in)); CUDA_CHECK(cudaFree(d_sum)); CUDA_CHECK(cudaFree(d_max));
 }
 
 TEST(SoftmaxSum, N1024_B128_I4)  { test_softmax_sum<1024, 128, 4>(); }
@@ -157,26 +167,27 @@ TEST(SoftmaxFwd, N5000_B128_I4)  { test_softmax_forward<5000, 128, 4>(); }
 // ==========================================================================
 // 4. host_softmax_forward (3-pass, 端到端)
 // ==========================================================================
-static void test_host_fwd(int n) {
-    auto h_in = make_data(n, -5.f, 5.f);
-    auto ref = cpu_softmax(h_in.data(), n);
+template <int N>
+static void test_host_fwd() {
+    auto h_in = make_data(N, -5.f, 5.f);
+    auto ref = cpu_softmax(h_in.data(), N);
 
     float *d = nullptr;
-    CUDA_CHECK(cudaMalloc(&d, n * sizeof(float)));
-    CUDA_CHECK(cudaMemcpy(d, h_in.data(), n * sizeof(float), cudaMemcpyHostToDevice));
-    host_softmax_forward(d, n);
-    std::vector<float> got(n);
-    CUDA_CHECK(cudaMemcpy(got.data(), d, n * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMalloc(&d, N * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d, h_in.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+    host_softmax_forward<N>(d);
+    std::vector<float> got(N);
+    CUDA_CHECK(cudaMemcpy(got.data(), d, N * sizeof(float), cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaFree(d));
 
-    float err = max_abs_diff(got.data(), ref.data(), n);
+    float err = max_abs_diff(got.data(), ref.data(), N);
     std::cout << "  host_3pass_err=" << err << std::endl;
     EXPECT_LT(err, 1e-2f);
 }
 
-TEST(HostSoftmaxFwd, N1024)  { test_host_fwd(1024); }
-TEST(HostSoftmaxFwd, N5000)  { test_host_fwd(5000); }
-TEST(HostSoftmaxFwd, N12345) { test_host_fwd(12345); }
+TEST(HostSoftmaxFwd, N1024)  { test_host_fwd<1024>(); }
+TEST(HostSoftmaxFwd, N5000)  { test_host_fwd<5000>(); }
+TEST(HostSoftmaxFwd, N12345) { test_host_fwd<12345>(); }
 
 // ==========================================================================
 // 5. host_online_softmax_forward (2-pass, 端到端)
