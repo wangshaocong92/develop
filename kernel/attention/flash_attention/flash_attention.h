@@ -1,10 +1,24 @@
 #pragma once
 
 #include <cutlass/numeric_types.h>
+#include <cstddef>
 #include <cute/tensor.hpp>
+#include <vector>
 namespace kernel {
-namespace cpu {
 using namespace cute;
+namespace gpu {
+template <int M, int N,
+          // q / out: MI 运行时 → shape[0] 和 stride[1] 用 int
+          class QTensor = Tensor<float, Layout<Shape<int, Int<N>>, Stride<Int<1>, int>>>,
+          // k / v: M 编译期
+          class KVTensor = Tensor<float, Layout<Shape<Int<M>, Int<N>>, Stride<Int<1>, Int<M>>>>>
+__global__ void flash_attention_forward(int mi,  // ← 运行时:本卡 q 的行数
+                                        const QTensor &q, const KVTensor &k, const KVTensor &v,
+                                        QTensor &out) {}
+
+}  // namespace gpu
+namespace cpu {
+
 template <int M, int N,
           class Tensor2D = Tensor<float, Layout<Shape<Int<M>, Int<N>>, Stride<Int<1>, Int<M>>>>>
 void flash_attention_forward(const Tensor2D &q, const Tensor2D &k, const Tensor2D &v,
@@ -25,6 +39,48 @@ void flash_attention_forward(const Tensor2D &q, const Tensor2D &k, const Tensor2
   out > mi x n
   这样就可以把中间矩阵分到更多的显卡上去,即使单个显卡的内存不够大,也可以支持整个系统的执行
   */
+  int DEVICE_NUM;
+  cudaGetDeviceCount(&DEVICE_NUM);                                    // = 2
+  constexpr size_t MAX_GMEM_SIZE_FOR_MI = 2ull * 1024 * 1024 * 1024;  // 2GB
+  if constexpr (sizeof(float) * M * M > MAX_GMEM_SIZE_FOR_MI) {
+    // 需要多卡协同
+    std::vector<cudaStream_t> streams(DEVICE_NUM);
+    std::vector<cudaEvent_t> done(DEVICE_NUM);
+    std::vector<float *> k_ptrs(DEVICE_NUM, nullptr);
+    std::vector<float *> v_ptrs(DEVICE_NUM, nullptr);
+    std::vector<Tensor2D> k_tensors(DEVICE_NUM);
+    std::vector<Tensor2D> v_tensors(DEVICE_NUM);
+    for (int d = 0; d < DEVICE_NUM; ++d) {
+      cudaSetDevice(d);
+      cudaStreamCreate(&streams[d]);
+      cudaEventCreate(&done[d]);
+      // 将 k v 复制到每个 device 上, 只需要复制一次, 因为 k v 是共享的
+      cudaMalloc(&k_ptrs[d], sizeof(float) * M * N);
+      cudaMalloc(&v_ptrs[d], sizeof(float) * M * N);
+      k_tensors[d] = Tensor2D(k_ptrs[d], Layout<Shape<Int<M>, Int<N>>, Stride<Int<1>, Int<M>>>());
+      v_tensors[d] = Tensor2D(v_ptrs[d], Layout<Shape<Int<M>, Int<N>>, Stride<Int<1>, Int<M>>>());
+      cudaMemcpy(k_ptrs[d], k.data(), sizeof(float) * M * N, cudaMemcpyHostToDevice, streams[d]);
+      cudaMemcpy(v_ptrs[d], v.data(), sizeof(float) * M * N, cudaMemcpyHostToDevice, streams[d]);
+    }
+
+    // 单卡计算多少
+    const int mi_per_device = M / DEVICE_NUM;
+    /// 多卡调度
+    // 多卡协同, 并且单卡计算的中间矩阵可以放下, 可以直接计算
+    for (int d = 0; d < DEVICE_NUM; ++d) {
+      cudaSetDevice(d);  // 关键:当前 device 上下文
+                         // 在 streams[d] 上 launch 该卡负责的 MI 行块对应的 kernel
+      if (sizeof(float) * mi_per_device * M > MAX_GMEM_SIZE_FOR_MI) {
+        /// 需要多卡协同, 并且单卡计算的中间矩阵也太大了, 需要分批计算
+      } else {
+      }
+      /// 调用
+      cudaEventRecord(done[d], streams[d]);
+    }
+
+  } else {
+    // 直接在单卡上执行
+  }
 }
 
 
