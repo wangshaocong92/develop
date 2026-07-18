@@ -4,9 +4,13 @@
 #include <cstddef>
 #include <cute/tensor.hpp>
 #include <vector>
+
+#include "device/device.cuh"
 namespace kernel {
 using namespace cute;
 namespace gpu {
+
+
 template <int M, int N,
           // q / out: MI 运行时 → shape[0] 和 stride[1] 用 int
           class QTensor = Tensor<float, Layout<Shape<int, Int<N>>, Stride<Int<1>, int>>>,
@@ -40,9 +44,10 @@ void flash_attention_forward(const Tensor2D &q, const Tensor2D &k, const Tensor2
   这样就可以把中间矩阵分到更多的显卡上去,即使单个显卡的内存不够大,也可以支持整个系统的执行
   */
   int DEVICE_NUM;
-  cudaGetDeviceCount(&DEVICE_NUM);                                    // = 2
-  constexpr size_t MAX_GMEM_SIZE_FOR_MI = 2ull * 1024 * 1024 * 1024;  // 2GB
-  if constexpr (sizeof(float) * M * M > MAX_GMEM_SIZE_FOR_MI) {
+  cudaGetDeviceCount(&DEVICE_NUM);  // = 2
+  // 单卡可用于中间矩阵的显存上界,从实际设备能力查询(替代此前硬编码的 2GB)。
+  const size_t MAX_GMEM_SIZE_FOR_MI = gpu::get_device().usable_gmem_for_intermediate();
+  if (sizeof(float) * M * M > MAX_GMEM_SIZE_FOR_MI) {
     // 需要多卡协同
     std::vector<cudaStream_t> streams(DEVICE_NUM);
     std::vector<cudaEvent_t> done(DEVICE_NUM);

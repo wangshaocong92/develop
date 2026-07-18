@@ -13,6 +13,7 @@ include_directories(
 )
 
 set(DIR_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/device/device.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce/reduce.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/softmax/softmax.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/attention/standard_attention/standard_attention.cu

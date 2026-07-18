@@ -23,6 +23,26 @@ set_target_properties(reduce_test PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
+# ---- device 测试 ----
+add_executable(device_test
+    test_device.cu
+)
+
+target_link_libraries(device_test PRIVATE
+    kernel
+    ${GTest_LIBRARIES}
+    CUDA::cudart
+)
+
+target_include_directories(device_test PRIVATE
+    ${CUDAToolkit_INCLUDE_DIRS}
+)
+
+set_target_properties(device_test PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
 # ---- softmax 测试 ----
 add_executable(softmax_test
     test_softmax.cpp
@@ -132,6 +152,7 @@ target_compile_options(standard_attention_bench PRIVATE
 enable_testing()
 include(GoogleTest)
 gtest_discover_tests(reduce_test)
+gtest_discover_tests(device_test)
 gtest_discover_tests(softmax_test)
 gtest_discover_tests(softmax_gpu_test)
 gtest_discover_tests(standard_attention_test)
