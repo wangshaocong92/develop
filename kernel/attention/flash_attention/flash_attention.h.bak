@@ -6,14 +6,12 @@
 #include <vector>
 
 #include "gemm/gemm_multi_stage.cuh"
-#include "gemm/gemm_rs.cuh"
 
 namespace kernel {
 using namespace cute;
 namespace gpu {
 
 // Debug kernel: only compute first S=Q·Kᵀ tile and write back
-// (unchanged)
 template <int M, int N, int q_step, int kv_step>
 __global__ void flash_attention_debug_gemm1(const half_t *q_ptr, const half_t *k_ptr,
                                             float *out_ptr) {
@@ -57,7 +55,6 @@ __global__ void flash_attention_debug_gemm1(const half_t *q_ptr, const half_t *k
   }
 }
 
-// Main flash attention forward kernel (register-based O)
 template <int M, int N, int q_step, int kv_step>
 __global__ void flash_attention_forward(const half_t *q_ptr, const half_t *k_ptr,
                                         const half_t *vt_ptr, half_t *p_scratch_ptr,
@@ -75,18 +72,24 @@ __global__ void flash_attention_forward(const half_t *q_ptr, const half_t *k_ptr
                                   : Gemm2Config::shm_size_AB;
 
   // ---- unified dynamic smem layout ----
-  // [0) ab_stage: half[shm_size_AB]      (shared by both gemms + V staging)
+  // [0) ab_stage: half[shm_size_AB]      (shared by both gemms)
   // [1) s_buf:   float[q_step * kv_step] (S = Q·Kᵀ, float)
+  // [2) o_acc:   float[q_step * N]       (running O accumulator)
+  // [3) pv:      float[q_step * N]       (current block P·V)
   extern __shared__ char smem_raw[];
 
   half_t *ab_stage = reinterpret_cast<half_t *>(smem_raw);
   float *s_buf =
       reinterpret_cast<float *>(smem_raw + shm_size_AB * sizeof(half_t));
+  float *o_acc = reinterpret_cast<float *>(
+      smem_raw + shm_size_AB * sizeof(half_t) + q_step * kv_step * sizeof(float));
+  float *pv = reinterpret_cast<float *>(
+      smem_raw + shm_size_AB * sizeof(half_t) + q_step * kv_step * sizeof(float) +
+      q_step * N * sizeof(float));
 
   // running max / sum — static smem
   __shared__ float m_state[q_step];
   __shared__ float l_state[q_step];
-  __shared__ float scale_arr[q_step];
 
   const int q_start = blockIdx.x * q_step;
 
@@ -99,26 +102,24 @@ __global__ void flash_attention_forward(const half_t *q_ptr, const half_t *k_ptr
   auto s_tensor = make_tensor(make_smem_ptr(s_buf),
                               make_layout(make_shape(Int<q_step>{}, Int<kv_step>{}),
                                           make_stride(Int<kv_step>{}, Int<1>{})));
+  auto o_tensor = make_tensor(make_smem_ptr(o_acc),
+                              make_layout(make_shape(Int<q_step>{}, Int<N>{}),
+                                          make_stride(Int<N>{}, Int<1>{})));
+  auto pv_tensor = make_tensor(make_smem_ptr(pv),
+                               make_layout(make_shape(Int<q_step>{}, Int<N>{}),
+                                           make_stride(Int<N>{}, Int<1>{})));
 
   // gmem P scratch for this block: (q_step, M) row-major, we write each kv-slab
   auto gP_scratch =
       make_tensor(make_gmem_ptr(p_scratch_ptr + q_start * M),
                   make_shape(Int<q_step>{}, Int<M>{}), make_stride(M, Int<1>{}));
 
-  // TiledMMA instance
-  using TiledMma = typename Gemm1Config::MMA;
-  TiledMma tiled_mma;
-  auto thr_mma = tiled_mma.get_slice(threadIdx.x);
-
-  // acc_o in registers (O accumulator)
-  auto acc_o = partition_fragment_C(tiled_mma, Shape<Int<q_step>, Int<N>>{});
-  clear(acc_o);
-
-  // ---- init m, l ----
+  // ---- init m, l, O ----
   for (int qi = threadIdx.x; qi < q_step; qi += blockDim.x) {
     m_state[qi] = -INFINITY;
     l_state[qi] = 0.f;
   }
+  for (int idx = threadIdx.x; idx < q_step * N; idx += blockDim.x) o_acc[idx] = 0.f;
   __syncthreads();
 
   // ---- iterate over KV blocks ----
@@ -133,22 +134,25 @@ __global__ void flash_attention_forward(const half_t *q_ptr, const half_t *k_ptr
     __syncthreads();
 
     // 2) online softmax: 每个 warp 协作处理一行,warp shuffle 归约 max/sum。
+    //    128 线程 = 4 warp,warp w 处理行 w, w+4, ...;行内 32 lane 并行处理列。
+    //    相比"一线程一行":全部线程参与、行内并行、访存更规整。
     const int warp_id = threadIdx.x / 32;
     const int lane = threadIdx.x % 32;
     const int n_warps = blockDim.x / 32;
     for (int qi = warp_id; qi < q_step; qi += n_warps) {
       const float m_old = m_state[qi];
 
-      // 行内 max
+      // 行内 max:各 lane 跨步扫 kv_step 列求局部 max,再 warp 归约
       float m_cur = -INFINITY;
       for (int kj = lane; kj < kv_step; kj += 32) m_cur = fmaxf(m_cur, s_tensor(qi, kj));
 #pragma unroll
       for (int off = 16; off > 0; off >>= 1)
         m_cur = fmaxf(m_cur, __shfl_xor_sync(0xffffffff, m_cur, off));
+      // 此时全 lane 的 m_cur 相同 = 本块该行 max
       const float m_new = fmaxf(m_old, m_cur);
       const float scale = __expf(m_old - m_new);
 
-      // 行内 sum(exp(s-m_new)) + 就地写 P 到 gmem scratch
+      // 行内 sum(exp(s-m_new)):各 lane 跨步累加 + 就地写 P 到 gmem scratch,再 warp 归约
       float l_part = 0.f;
       for (int kj = lane; kj < kv_step; kj += 32) {
         const float p = __expf(s_tensor(qi, kj) - m_new);
@@ -159,122 +163,50 @@ __global__ void flash_attention_forward(const half_t *q_ptr, const half_t *k_ptr
       for (int off = 16; off > 0; off >>= 1) l_part += __shfl_xor_sync(0xffffffff, l_part, off);
       const float l_new = l_state[qi] * scale + l_part;
 
+      // rescale 已累加的 O:各 lane 并行处理 N 列
+      for (int d = lane; d < N; d += 32) o_tensor(qi, d) *= scale;
+
       if (lane == 0) {
         m_state[qi] = m_new;
         l_state[qi] = l_new;
-        scale_arr[qi] = scale;
       }
     }
     __syncthreads();
 
-    // Rescale acc_o before adding new P·V
-    {
-      Tensor cO = make_identity_tensor(make_shape(Int<q_step>{}, Int<N>{}));
-      auto taccOcO = thr_mma.partition_C(cO);
-      for (int m = 0; m < size<1>(acc_o); ++m) {
-        for (int n = 0; n < size<2>(acc_o); ++n) {
-          for (int v = 0; v < size<0>(acc_o); ++v) {
-            int qi = get<0>(taccOcO(v, m, n));
-            acc_o(v, m, n) *= scale_arr[qi];
-          }
-        }
-      }
-    }
-    __syncthreads();
+    // 3) P · V  (gemm2: kAB, A=P half gmem, B=V_T half gmem, output float smem)
+    // P slab for this kv block: (q_step, kv_step) row-major
+    auto gP_slab =
+        make_tensor(make_gmem_ptr(p_scratch_ptr + q_start * M + kv),
+                    make_shape(Int<q_step>{}, Int<kv_step>{}), make_stride(M, Int<1>{}));
 
-    // 3) gemm_rs: P(in registers) · V(smem) → acc_o(registers)
-    // 3a) Load P from gmem scratch into registers via temporary smem
-    auto gP_slab = make_tensor(make_gmem_ptr(p_scratch_ptr + q_start * M + kv),
-                               make_shape(Int<q_step>{}, Int<kv_step>{}), make_stride(M, Int<1>{}));
-    using MySmemLayoutP = decltype(tile_to_shape(
-        typename Gemm2Config::SmemLayoutAtom{}, make_shape(Int<q_step>{}, Int<kv_step>{})));
-    auto sP = make_tensor(make_smem_ptr(ab_stage), MySmemLayoutP{});
-    using G2SCopyA = typename Gemm2Config::G2SCopyA;
-    G2SCopyA g2s_copy_a;
-    auto g2s_thr_copy_a = g2s_copy_a.get_slice(threadIdx.x);
-    auto tPgP = g2s_thr_copy_a.partition_S(gP_slab);
-    auto tPsP = g2s_thr_copy_a.partition_D(sP);
-    cute::copy(g2s_copy_a, tPgP, tPsP);
-    cp_async_fence();
-    cp_async_wait<0>();
-    __syncthreads();
-
-    auto tCrP = thr_mma.partition_fragment_A(sP);
-    using S2RCopyAtomA = typename Gemm2Config::S2RCopyAtomA;
-    auto s2r_copy_a = make_tiled_copy_A(S2RCopyAtomA{}, tiled_mma);
-    auto s2r_thr_copy_a = s2r_copy_a.get_slice(threadIdx.x);
-    auto tAsP = s2r_thr_copy_a.partition_S(sP);
-    auto tCrP_view = s2r_thr_copy_a.retile_D(tCrP);
-    for (int ik = 0; ik < size<2>(tCrP); ++ik) {
-      cute::copy(s2r_copy_a, tAsP(_, _, ik), tCrP_view(_, _, ik));
-    }
-    __syncthreads();
-
-    // 3b) Load V into smem (2D swizzled layout for gemm_rs)
+    // V_T slab: (N, kv_step) row-major, base = vt_ptr + kv
     auto gVT_slab =
         make_tensor(make_gmem_ptr(vt_ptr + kv),
                     make_shape(Int<N>{}, Int<kv_step>{}), make_stride(M, Int<1>{}));
-    using MySmemLayoutV = decltype(tile_to_shape(
-        typename Gemm2Config::SmemLayoutAtom{}, make_shape(Int<N>{}, Int<kv_step>{})));
-    auto sV = make_tensor(make_smem_ptr(ab_stage), MySmemLayoutV{});
-    using G2SCopyB = typename Gemm2Config::G2SCopyB;
-    G2SCopyB g2s_copy_b;
-    auto g2s_thr_copy_b = g2s_copy_b.get_slice(threadIdx.x);
-    auto tVgV = g2s_thr_copy_b.partition_S(gVT_slab);
-    auto tVsV = g2s_thr_copy_b.partition_D(sV);
-    cute::copy(g2s_copy_b, tVgV, tVsV);
-    cp_async_fence();
-    cp_async_wait<0>();
+
+    gemm_multi_stage_device<Gemm2Config>(pv_tensor, gP_slab, gVT_slab, ab_stage);
     __syncthreads();
 
-    // 3c) Set up gemm_rs
-    using MySmemLayoutVNoSwizzle = decltype(get_nonswizzle_portion(MySmemLayoutV{}));
-    auto sV_no_swizzle = make_tensor(sV.data().get(), MySmemLayoutVNoSwizzle{});
-    auto tOrVt = thr_mma.partition_fragment_B(sV_no_swizzle);
-    using S2RCopyAtomB = typename Gemm2Config::S2RCopyAtomB;
-    auto smem_tiled_copy_V = make_tiled_copy_B(S2RCopyAtomB{}, tiled_mma);
-    auto smem_thr_copy_V = smem_tiled_copy_V.get_slice(threadIdx.x);
-    auto tOsVt = smem_thr_copy_V.partition_S(sV);
-
-    gemm_rs(acc_o, tCrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
+    // 4) O += P·V
+    for (int idx = threadIdx.x; idx < q_step * N; idx += blockDim.x) o_acc[idx] += pv[idx];
     __syncthreads();
   }
 
-  // ---- epilogue: normalize acc_o and write back ----
-  // Normalize each row by l_state
-  Tensor cO = make_identity_tensor(make_shape(Int<q_step>{}, Int<N>{}));
-  auto taccOcO = thr_mma.partition_C(cO);
-#pragma unroll
-  for (int m = 0; m < size<1>(acc_o); ++m) {
-    for (int n = 0; n < size<2>(acc_o); ++n) {
-      for (int v = 0; v < size<0>(acc_o); ++v) {
-        int row = get<0>(taccOcO(v, m, n));
-        acc_o(v, m, n) *= (1.f / l_state[row]);
-      }
-    }
-  }
-
-  // Write acc_o to gmem
+  // ---- write back O / l ----
   auto out_slab =
       make_tensor(make_gmem_ptr(out_ptr + q_start * N),
                   make_shape(Int<q_step>{}, Int<N>{}), make_stride(N, Int<1>{}));
 
-  // Use partition_C to write to smem first, then copy to gmem? No, write directly.
-  // Actually, let's write directly using the identity tensor mapping.
-  auto tCsO = thr_mma.partition_C(out_slab);
-#pragma unroll
-  for (int m = 0; m < size<1>(acc_o); ++m) {
-    for (int n = 0; n < size<2>(acc_o); ++n) {
-      for (int v = 0; v < size<0>(acc_o); ++v) {
-        if (get<0>(taccOcO(v, m, n)) < q_step && get<1>(taccOcO(v, m, n)) < N) {
-          tCsO(v, m, n) = static_cast<float>(acc_o(v, m, n));
-        }
-      }
-    }
+  for (int qi = threadIdx.x; qi < q_step; qi += blockDim.x) {
+    const float inv = 1.f / l_state[qi];
+    for (int d = 0; d < N; ++d) out_slab(qi, d) = o_tensor(qi, d) * inv;
   }
 }
 
 // ---- host launcher ----
+// q_rows:本次要处理的 query 行数(默认 M,即全部)。多卡时每卡只处理自己那片 Q,
+//   传入该片行数;q/out/p_scratch 指针应已指向该片起点。q_rows 必须是 q_step 整数倍。
+// 注意:模板参数 M 仍是 K/V 的序列长度(kernel 内部沿 M 遍历 kv 块),与 q_rows 解耦。
 template <int M, int N, int q_step, int kv_step>
 inline void host_flash_attention_forward(const half_t *q, const half_t *k, const half_t *vt,
                                          half_t *p_scratch, float *out, int q_rows = M,
@@ -289,12 +221,13 @@ inline void host_flash_attention_forward(const half_t *q, const half_t *k, const
                                   : Gemm2Config::shm_size_AB;
 
   constexpr int total_smem =
-      shm_size_AB * sizeof(half_t) + q_step * kv_step * sizeof(float);
+      shm_size_AB * sizeof(half_t) + q_step * kv_step * sizeof(float) +
+      q_step * N * sizeof(float) + q_step * N * sizeof(float);
 
   static_assert(total_smem <= 99000, "Dynamic smem exceeds ~99KB limit");
 
   dim3 block(Gemm1Config::kThreadNum);
-  dim3 grid(q_rows / q_step);
+  dim3 grid(q_rows / q_step);  // 本片 query 的块数
 
   cudaFuncSetAttribute(flash_attention_forward<M, N, q_step, kv_step>,
                        cudaFuncAttributeMaxDynamicSharedMemorySize, total_smem);
@@ -306,13 +239,20 @@ inline void host_flash_attention_forward(const half_t *q, const half_t *k, const
 
 namespace cpu {
 
-// Multi-GPU flash attention (unchanged)
+// 多卡 flash attention(方案1:按 query 行切分到各卡,K/V 全量复制,无跨卡通信)。
+//   q  : host half[M, N] row-major
+//   k  : host half[M, N] row-major
+//   vt : host half[N, M] row-major(V 的转置,供 P·V 的 A·B gemm)
+//   out: host float[M, N] row-major
+// 约束(继承单卡 kernel):N==head_dim 且是编译期;M、每卡行数均为 q_step 整数倍。
+// 每卡复制完整 K/V,只接收自己负责的 Q 行块,独立算出对应 O 行块,行间无依赖。
 template <int M, int N, int q_step, int kv_step>
 void flash_attention_forward(const half_t *q, const half_t *k, const half_t *vt, float *out) {
   int device_num = 0;
   cudaGetDeviceCount(&device_num);
   if (device_num < 1) return;
 
+  // ---- 按 q_step 块粒度把 M/q_step 个块均分到各卡(避免切碎 q_step tile)----
   const int total_blocks = M / q_step;
   const int base_blk = total_blocks / device_num;
   const int rem_blk = total_blocks % device_num;
@@ -321,10 +261,10 @@ void flash_attention_forward(const half_t *q, const half_t *k, const half_t *vt,
   std::vector<half_t *> d_q(device_num, nullptr);
   std::vector<half_t *> d_k(device_num, nullptr);
   std::vector<half_t *> d_vt(device_num, nullptr);
-  std::vector<half_t *> d_ps(device_num, nullptr);
+  std::vector<half_t *> d_ps(device_num, nullptr);  // P scratch
   std::vector<float *> d_out(device_num, nullptr);
-  std::vector<int> q_rows(device_num, 0);
-  std::vector<int> row0(device_num, 0);
+  std::vector<int> q_rows(device_num, 0);  // 本卡负责的 query 行数
+  std::vector<int> row0(device_num, 0);    // 本卡行块在全局 Q 的起始行
 
   for (int d = 0, blk = 0; d < device_num; ++d) {
     int my_blocks = base_blk + (d < rem_blk ? 1 : 0);
@@ -333,31 +273,37 @@ void flash_attention_forward(const half_t *q, const half_t *k, const half_t *vt,
     blk += my_blocks;
   }
 
+  // ---- 各卡:分配 + 拷贝(K/V 全量,Q/out 只本片),再在各自 stream 上算 ----
   for (int d = 0; d < device_num; ++d) {
     cudaSetDevice(d);
     cudaStreamCreate(&streams[d]);
-    if (q_rows[d] == 0) continue;
+    if (q_rows[d] == 0) continue;  // 卡多于块数时尾部卡空闲
 
     const int mi = q_rows[d];
     cudaMalloc(&d_k[d], sizeof(half_t) * M * N);
     cudaMalloc(&d_vt[d], sizeof(half_t) * N * M);
     cudaMalloc(&d_q[d], sizeof(half_t) * mi * N);
     cudaMalloc(&d_out[d], sizeof(float) * mi * N);
-    cudaMalloc(&d_ps[d], sizeof(half_t) * mi * M);
+    cudaMalloc(&d_ps[d], sizeof(half_t) * mi * M);  // P scratch: (mi, M)
 
+    // K/V 共享,每卡一份完整拷贝
     cudaMemcpyAsync(d_k[d], k, sizeof(half_t) * M * N, cudaMemcpyHostToDevice, streams[d]);
     cudaMemcpyAsync(d_vt[d], vt, sizeof(half_t) * N * M, cudaMemcpyHostToDevice, streams[d]);
+    // 本卡的 Q 行块
     cudaMemcpyAsync(d_q[d], q + static_cast<size_t>(row0[d]) * N, sizeof(half_t) * mi * N,
                     cudaMemcpyHostToDevice, streams[d]);
     cudaMemsetAsync(d_ps[d], 0, sizeof(half_t) * mi * M, streams[d]);
 
+    // 本卡处理 mi 行 query(grid = mi/q_step 个 block),K/V 用完整 M
     gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q[d], d_k[d], d_vt[d], d_ps[d],
                                                              d_out[d], /*q_rows=*/mi, streams[d]);
 
+    // 算完把本卡 O 行块拷回全局 out 对应行块
     cudaMemcpyAsync(out + static_cast<size_t>(row0[d]) * N, d_out[d], sizeof(float) * mi * N,
                     cudaMemcpyDeviceToHost, streams[d]);
   }
 
+  // ---- 同步并回收 ----
   for (int d = 0; d < device_num; ++d) {
     cudaSetDevice(d);
     cudaStreamSynchronize(streams[d]);

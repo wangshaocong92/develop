@@ -3,6 +3,8 @@
 #include <cuda_runtime.h>
 
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace kernel {
 namespace gpu {
@@ -11,8 +13,10 @@ namespace {
 
 // 把 name_ 安全地拷进定长缓冲区并保证 '\0' 结尾。
 void set_name(Device &dev, const char *name) {
-  std::strncpy(dev.name_, name, sizeof(dev.name_) - 1);
-  dev.name_[sizeof(dev.name_) - 1] = '\0';
+  std::size_t n = std::strlen(name);
+  if (n >= sizeof(dev.name_)) { n = sizeof(dev.name_) - 1; }
+  std::memcpy(dev.name_, name, n);
+  dev.name_[n] = '\0';
 }
 
 // 依据 cudaDeviceProp 识别已知型号。
@@ -56,9 +60,8 @@ static Device from_prop(const cudaDeviceProp &prop) {
   return dev;
 }
 
-Device get_device(int ordinal) {
-  if (ordinal < 0) { cudaGetDevice(&ordinal); }
-
+// 实际执行一次检测:查询 cudaDeviceProperties 并识别型号。
+static Device detect_device(int ordinal) {
   cudaDeviceProp prop{};
   if (cudaGetDeviceProperties(&prop, ordinal) != cudaSuccess) {
     return Device{};  // 查询失败:返回 Unknown 的空能力
@@ -72,6 +75,26 @@ Device get_device(int ordinal) {
       break;
   }
   return from_prop(prop);
+}
+
+Device get_device(int ordinal) {
+  if (ordinal < 0) { cudaGetDevice(&ordinal); }
+
+  // 设备属性在进程生命周期内不变,按 ordinal 缓存,避免重复的
+  // cudaGetDeviceProperties 运行时查询。查询失败(Unknown)不写入缓存,
+  // 以便后续重试。
+  static std::mutex mtx;
+  static std::unordered_map<int, Device> cache;
+
+  std::lock_guard<std::mutex> lock(mtx);
+  auto it = cache.find(ordinal);
+  if (it != cache.end()) { return it->second; }
+
+  Device dev = detect_device(ordinal);
+  // 查询失败会返回 compute_capability_ == 0 的空能力,不缓存以便后续重试;
+  // 识别成功或"有效但未知型号"(from_prop)都缓存。
+  if (dev.compute_capability() > 0) { cache.emplace(ordinal, dev); }
+  return dev;
 }
 
 }  // namespace gpu
