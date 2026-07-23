@@ -12,6 +12,7 @@
  ******************************************************************************/
 
 #include <cstdio>
+#include <chrono>
 #include <random>
 #include <vector>
 
@@ -98,51 +99,75 @@ static float bench_flash() {
   for (int r = 0; r < M; ++r)
     for (int c = 0; c < N; ++c) h_vth[c * M + r] = static_cast<half_t>(h_v[r * N + c]);
 
-  half_t *d_q, *d_k, *d_vt, *d_p_scratch;
+  half_t *d_q, *d_k, *d_vt;
   float *d_out;
   cudaMalloc(&d_q, sizeof(half_t) * M * N);
   cudaMalloc(&d_k, sizeof(half_t) * M * N);
   cudaMalloc(&d_vt, sizeof(half_t) * N * M);
-  cudaMalloc(&d_p_scratch, sizeof(half_t) * M * M);
   cudaMalloc(&d_out, sizeof(float) * M * N);
   cudaMemcpy(d_q, h_qh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
   cudaMemcpy(d_k, h_kh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
   cudaMemcpy(d_vt, h_vth.data(), sizeof(half_t) * N * M, cudaMemcpyHostToDevice);
-  cudaMemset(d_p_scratch, 0, sizeof(half_t) * M * M);
   cudaMemset(d_out, 0, sizeof(float) * M * N);
 
   auto run = [&] {
-    kernel::gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q, d_k, d_vt, d_p_scratch,
-                                                                     d_out);
+    kernel::gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q, d_k, d_vt, d_out);
   };
   float ms = time_gpu_ms(run);
 
   cudaFree(d_q);
   cudaFree(d_k);
   cudaFree(d_vt);
-  cudaFree(d_p_scratch);
   cudaFree(d_out);
   return ms;
 }
 
-// 一行结果:M, N, standard ms, flash ms, flash 相对 standard 加速
+// ----- flash attention 多卡(方案一分卡):setup 一次,只计 compute -----
+// K/V/Q 一次性拷入各卡(构造),run() 只做 kernel + O 的 D2H + 同步,重复计时取均值。
+// 剥离一次性 malloc/H2D(真实部署里数据常驻多卡、复用),看分片计算本身的加速。
+template <int M, int N, int q_step, int kv_step>
+static float bench_flash_multi(int *out_dev, int iters = 20, int warmup = 5) {
+  auto h_q = make_data(M * N), h_k = make_data(M * N), h_v = make_data(M * N);
+  std::vector<half_t> h_qh(M * N), h_kh(M * N), h_vth(N * M);
+  for (int i = 0; i < M * N; ++i) {
+    h_qh[i] = static_cast<half_t>(h_q[i]);
+    h_kh[i] = static_cast<half_t>(h_k[i]);
+  }
+  for (int r = 0; r < M; ++r)
+    for (int c = 0; c < N; ++c) h_vth[c * M + r] = static_cast<half_t>(h_v[r * N + c]);
+
+  std::vector<float> h_out(M * N);
+  kernel::cpu::MultiGpuFlash<M, N, q_step, kv_step> mg(h_qh.data(), h_kh.data(), h_vth.data());
+  *out_dev = mg.device_num();
+
+  for (int i = 0; i < warmup; ++i) mg.run();
+  auto t0 = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iters; ++i) mg.run();
+  auto t1 = std::chrono::high_resolution_clock::now();
+  return std::chrono::duration<double, std::milli>(t1 - t0).count() / iters;
+}
+
+// 一行结果:standard / flash 单卡纯 kernel / flash 多卡分片计算(不含一次性拷贝)
 template <int M, int N, int q_step, int kv_step>
 static void bench_row() {
   float std_ms = bench_standard<M, N>();
   float fl_ms = bench_flash<M, N, q_step, kv_step>();
-  printf("  M=%-5d N=%-4d | standard %8.4f ms | flash %8.4f ms | flash/std %6.2fx\n", M, N, std_ms,
-         fl_ms, std_ms / fl_ms);
+  int dev = 0;
+  float multi_ms = bench_flash_multi<M, N, q_step, kv_step>(&dev);
+  printf("  M=%-5d N=%-4d | standard %8.4f | flash-1gpu %8.4f | flash-%dgpu %8.4f ms (计算,不含拷贝)\n",
+         M, N, std_ms, fl_ms, dev, multi_ms);
 }
 
 int main() {
   printf("===== Attention Benchmark (RTX 4090) =====\n");
-  printf("standard=float CUTLASS SIMT, flash=half in/F32 acc (q_step=64,kv_step=32)\n");
-  printf("N=128 = GPT-4 head_dim; M = 序列长度(GPT-4 context 8K~32K)\n\n");
+  printf("standard=float CUTLASS(纯kernel), flash-1gpu=half 单卡纯kernel\n");
+  printf("flash-Ngpu=多卡方案一分片计算(K/V/Q 已常驻各卡,只计 kernel+O回传+同步)\n");
+  printf("N=128 = GPT-4 head_dim; M = 序列长度\n\n");
 
   bench_row<2048, 128, 64, 32>();
   bench_row<4096, 128, 64, 32>();
-  bench_row<8192, 128, 64, 32>();   // GPT-4 base context
-  bench_row<16384, 128, 64, 32>();  // GPT-4 turbo 级
+  bench_row<8192, 128, 64, 32>();
+  bench_row<16384, 128, 64, 32>();
 
   printf("\n(PyTorch SDPA 对比: python3 kernel/test/bench_attention_torch.py)\n");
   return 0;

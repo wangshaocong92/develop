@@ -52,6 +52,7 @@ __forceinline__ __device__ void gemm_rs(TensorAcc &acc, TensorAReg const &tCrA, 
 #pragma unroll
   for (int i = 0; i < size<2>(tCrA); ++i) {
     if (i < size<2>(tCrA) - 1) {
+      
       cute::copy(smem_tiled_copy_B, tCsB(_, _, i + 1), tCrB_copy_view(_, _, i + 1));
     }
     cute::gemm(tiled_mma, tCrA(_, _, i), tCrB(_, _, i), acc);

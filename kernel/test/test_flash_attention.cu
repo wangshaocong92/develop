@@ -93,23 +93,20 @@ static void test_flash_attention() {
     }
 
   // device allocation
-  half_t *d_q, *d_k, *d_vt, *d_p_scratch;
+  half_t *d_q, *d_k, *d_vt;
   float *d_out;
   cudaMalloc(&d_q, sizeof(half_t) * M * N);
   cudaMalloc(&d_k, sizeof(half_t) * M * N);
   cudaMalloc(&d_vt, sizeof(half_t) * N * M);
-  cudaMalloc(&d_p_scratch, sizeof(half_t) * M * M);
   cudaMalloc(&d_out, sizeof(float) * M * N);
 
   cudaMemcpy(d_q, h_qh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
   cudaMemcpy(d_k, h_kh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
   cudaMemcpy(d_vt, h_vth.data(), sizeof(half_t) * N * M, cudaMemcpyHostToDevice);
-  cudaMemset(d_p_scratch, 0, sizeof(half_t) * M * M);
   cudaMemset(d_out, 0, sizeof(float) * M * N);
 
   // launch
-  kernel::gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q, d_k, d_vt,
-                                                                     d_p_scratch, d_out);
+  kernel::gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q, d_k, d_vt, d_out);
   ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
   std::vector<float> h_out(M * N);
@@ -118,7 +115,6 @@ static void test_flash_attention() {
   cudaFree(d_q);
   cudaFree(d_k);
   cudaFree(d_vt);
-  cudaFree(d_p_scratch);
   cudaFree(d_out);
 
   float err = max_abs_diff(h_out.data(), h_ref.data(), M * N);
@@ -242,6 +238,98 @@ TEST(FlashAttentionMultiGpu, M512_N64_q64_kv32) {
 // 块数为奇数:验证不整除时前若干卡多担 1 块
 TEST(FlashAttentionMultiGpu, M448_N64_q64_kv32) {
   test_flash_attention_multi_gpu<448, 64, 64, 32>();
+}
+
+// ==========================================================================
+// 大 M 显存实测:验证去掉 p_scratch 后 flash 显存是 O(M) 线性,长序列能跑。
+// 用 cudaMemGetInfo 量实际 gmem 占用,与理论值(Q+K+Vt+O)对比。
+// 正确性只抽查前 q_step 行(避免 O(M²) 的 CPU 全量参考爆内存/超时)。
+// ==========================================================================
+template <int M, int N, int q_step, int kv_step>
+static void test_flash_attention_large() {
+  static_assert(M % q_step == 0, "M must be divisible by q_step");
+
+  std::mt19937 rng(7);
+  std::uniform_real_distribution<float> dis(-1.f, 1.f);
+  std::vector<float> h_qf(static_cast<size_t>(M) * N), h_kf(static_cast<size_t>(M) * N),
+      h_vf(static_cast<size_t>(M) * N);
+  for (auto &x : h_qf) x = dis(rng);
+  for (auto &x : h_kf) x = dis(rng);
+  for (auto &x : h_vf) x = dis(rng);
+
+  std::vector<half_t> h_qh(static_cast<size_t>(M) * N), h_kh(static_cast<size_t>(M) * N),
+      h_vth(static_cast<size_t>(N) * M);
+  for (size_t i = 0; i < static_cast<size_t>(M) * N; ++i) {
+    h_qh[i] = static_cast<half_t>(h_qf[i]);
+    h_kh[i] = static_cast<half_t>(h_kf[i]);
+  }
+  for (int n = 0; n < N; ++n)
+    for (int m = 0; m < M; ++m)
+      h_vth[static_cast<size_t>(n) * M + m] = static_cast<half_t>(h_vf[static_cast<size_t>(m) * N + n]);
+
+  half_t *d_q, *d_k, *d_vt;
+  float *d_out;
+  cudaMalloc(&d_q, sizeof(half_t) * M * N);
+  cudaMalloc(&d_k, sizeof(half_t) * M * N);
+  cudaMalloc(&d_vt, sizeof(half_t) * N * M);
+  cudaMalloc(&d_out, sizeof(float) * M * N);
+  cudaMemcpy(d_q, h_qh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_k, h_kh.data(), sizeof(half_t) * M * N, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_vt, h_vth.data(), sizeof(half_t) * N * M, cudaMemcpyHostToDevice);
+  cudaMemset(d_out, 0, sizeof(float) * M * N);
+
+  // 量 kernel 运行前后的空闲显存差(近似 kernel 额外占用,应远小于 gmem 张量)
+  size_t free_before = 0, total = 0;
+  cudaMemGetInfo(&free_before, &total);
+  kernel::gpu::host_flash_attention_forward<M, N, q_step, kv_step>(d_q, d_k, d_vt, d_out);
+  ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+  size_t free_after = 0;
+  cudaMemGetInfo(&free_after, &total);
+
+  // gmem 张量理论占用(Q+K+Vt 各 M*N half, O M*N float)
+  double io_gib = (3.0 * M * N * sizeof(half_t) + 1.0 * M * N * sizeof(float)) / (1024.0 * 1024 * 1024);
+
+  // 抽查前 q_step 行正确性(单块 CPU 参考:S=Qi·Kᵀ 全 M 列 → softmax → ·V)
+  std::vector<float> h_out(static_cast<size_t>(q_step) * N);
+  cudaMemcpy(h_out.data(), d_out, sizeof(float) * q_step * N, cudaMemcpyDeviceToHost);
+  std::vector<float> ref(static_cast<size_t>(q_step) * N, 0.f);
+  for (int i = 0; i < q_step; ++i) {
+    std::vector<float> s(M);
+    float mx = -INFINITY;
+    for (int j = 0; j < M; ++j) {
+      float acc = 0.f;
+      for (int d = 0; d < N; ++d) acc += h_qf[i * N + d] * h_kf[j * N + d];
+      s[j] = acc;
+      mx = fmaxf(mx, acc);
+    }
+    double sum = 0.0;
+    for (int j = 0; j < M; ++j) { s[j] = expf(s[j] - mx); sum += s[j]; }
+    for (int d = 0; d < N; ++d) {
+      float acc = 0.f;
+      for (int j = 0; j < M; ++j) acc += s[j] * h_vf[j * N + d];
+      ref[i * N + d] = acc / static_cast<float>(sum);
+    }
+  }
+  float err = max_abs_diff(h_out.data(), ref.data(), q_step * N);
+
+  std::cout << "  [large] M=" << M << " N=" << N << " | IO张量理论 " << io_gib
+            << " GiB | kernel运行占用增量 "
+            << (free_before - free_after) / (1024.0 * 1024) << " MiB | 前" << q_step
+            << "行 err=" << err << std::endl;
+
+  cudaFree(d_q);
+  cudaFree(d_k);
+  cudaFree(d_vt);
+  cudaFree(d_out);
+  EXPECT_LT(err, 1e-2f);
+}
+
+// 大序列:显存应线性(~百 MiB~GiB 级),远小于 standard 的 O(M²)。
+TEST(FlashAttentionLarge, M32768_N64) {
+  test_flash_attention_large<32768, 64, 64, 32>();
+}
+TEST(FlashAttentionLarge, M65536_N128) {
+  test_flash_attention_large<65536, 128, 64, 32>();
 }
 
 int main(int argc, char **argv) {
